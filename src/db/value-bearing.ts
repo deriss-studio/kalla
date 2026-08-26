@@ -240,6 +240,32 @@ export const SUBJECT_REACH: Record<string, 'by_subject_id' | 'by_cell_id'> = {
   contest: 'by_cell_id',
 }
 
+/**
+ * How a retained table's rows reach the sheets a person appears in.
+ *
+ * Retention is not silence. A column kept through an erasure still has to be
+ * disclosed, so the subject access pack needs a route from the person to every
+ * retained holding — and a retained table without a route here would be kept
+ * and never disclosed, which is the worst of both.
+ */
+export const RETAINED_REACH: Record<string, string> = {
+  sheet: 'id',
+  column: 'sheet_id',
+  lia: 'sheet_id',
+}
+
+/** Retained columns grouped by table, for disclosure. */
+export function retainedColumns(): Map<string, ColumnClass[]> {
+  const byTable = new Map<string, ColumnClass[]>()
+  for (const c of VALUE_BEARING) {
+    if (c.classification !== 'retained') continue
+    const list = byTable.get(c.table) ?? []
+    list.push(c)
+    byTable.set(c.table, list)
+  }
+  return byTable
+}
+
 /** Subject columns grouped by table, for the tables erasure can reach. */
 export function redactableColumns(): Map<string, ColumnClass[]> {
   const byTable = new Map<string, ColumnClass[]>()
