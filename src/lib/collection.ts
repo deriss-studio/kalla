@@ -73,6 +73,33 @@ export function syntheticReceipt(
   })
 }
 
+/** The sentinel domain for a file the controller supplied. */
+export const IMPORTED = 'imported-file'
+
+/**
+ * A receipt for a value that arrived in a file rather than off the web.
+ *
+ * An import is not a fetch, so it asserts no collection state: robots and
+ * ai.txt are recorded as `n/a` because nothing was crawled and nothing
+ * objected. That is the honest record, and it is what keeps the guarantee
+ * meaningful — you still cannot claim a fetched state you did not obtain,
+ * because this claims none.
+ *
+ * It is not synthetic. The data is real, the controller supplied it, and the
+ * provenance row names the file and the person who ran the import.
+ */
+export function importReceipt(file: string, importedBy: string): CollectionReceipt {
+  return mint({
+    url: `file://${file}`,
+    domain: IMPORTED,
+    robotsState: 'n/a',
+    aiTxtState: 'n/a',
+    crawlerId: `import:${importedBy}`,
+    retrievedAt: new Date(),
+    synthetic: false,
+  })
+}
+
 export class DomainBlockedError extends Error {
   constructor(readonly domain: string, readonly reason: string) {
     super(`collection blocked: ${domain} (${reason})`)

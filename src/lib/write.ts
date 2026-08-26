@@ -23,6 +23,7 @@ import { resolveSubject, type UncertaintyReason } from './person.js'
 import {
   assertNotBlockedEvidence,
   decisionFor,
+  IMPORTED,
   domainOf,
   isCollectionReceipt,
   type CollectionReceipt,
@@ -348,6 +349,18 @@ async function verifiedReceipt(
   }
 
   if (receipt.synthetic) return receipt
+
+  // An imported file went through no gate because there was no gate to go
+  // through: the controller supplied it. It asserts no collection state, which
+  // is what makes that acceptable.
+  if (receipt.domain === IMPORTED) {
+    if (receipt.robotsState !== 'n/a' || receipt.aiTxtState !== 'n/a') {
+      throw new Error(
+        'invariant violated: an imported value cannot assert a robots or ai.txt state, because nothing was fetched',
+      )
+    }
+    return receipt
+  }
 
   const known = await decisionFor(db, workspaceId, receipt.domain)
   if (known?.decision !== 'allowed') {
