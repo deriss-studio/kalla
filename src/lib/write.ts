@@ -111,7 +111,7 @@ export async function writeCellValue(
   const firstWriteExpiry = new Date(Date.now() + retentionDays * 86_400_000)
 
   return db.transaction(async (tx) => {
-    const subjectId = await resolveSubject(
+    const { subjectId, uncertainty } = await resolveSubject(
       tx as unknown as Db,
       workspaceId,
       {
@@ -132,6 +132,7 @@ export async function writeCellValue(
           value: result.value,
           state: 'filled',
           subjectId,
+          subjectUncertainty: uncertainty,
           updatedAt: new Date(),
         })
         .where(eq(cell.id, existing.id))
@@ -146,6 +147,7 @@ export async function writeCellValue(
           value: result.value,
           state: 'filled',
           subjectId,
+          subjectUncertainty: uncertainty,
           retentionExpiresAt: firstWriteExpiry,
         })
         .returning({ id: cell.id })
@@ -278,7 +280,10 @@ export async function createRow(
     }
 
     const kind = input.kind ?? 'organisation'
-    const subjectId = await resolveSubject(
+    // A row has nowhere to record doubt yet, so an unresolved person-kind row
+    // simply carries no subject. Noted rather than hidden: the uncertainty
+    // column exists on cell only.
+    const { subjectId } = await resolveSubject(
       tx as unknown as Db,
       workspaceId,
       { value: input.label, rowKind: kind },
@@ -324,7 +329,7 @@ export async function applyHumanValue(
 
   // The person inherits the cell's existing clock rather than a fresh one: a
   // correction is not a new collection, and must not renew retention.
-  const subjectId = await resolveSubject(
+  const { subjectId, uncertainty } = await resolveSubject(
     tx,
     workspaceId,
     {
@@ -338,7 +343,13 @@ export async function applyHumanValue(
 
   await tx
     .update(cell)
-    .set({ value, state: 'filled', subjectId, updatedAt: new Date() })
+    .set({
+      value,
+      state: 'filled',
+      subjectId,
+      subjectUncertainty: uncertainty,
+      updatedAt: new Date(),
+    })
     .where(eq(cell.id, cellId))
 
   for (const s of sources) {

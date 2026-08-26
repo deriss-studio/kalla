@@ -89,6 +89,21 @@ export const collectionDecision = pgEnum('collection_decision', [
 
 export const erasureState = pgEnum('erasure_state', ['active', 'erased'])
 
+/**
+ * Why a cell's subject could not be settled either way. A closed set, and an
+ * enum rather than free text so it can never carry the value it is uncertain
+ * about.
+ *
+ *   ambiguous_identity       — the value looks like it identifies someone, but
+ *                              produced no stable key to resolve on.
+ *   context_without_identity — the column or row says personal, and nothing in
+ *                              the value identifies anyone.
+ */
+export const subjectUncertainty = pgEnum('subject_uncertainty', [
+  'ambiguous_identity',
+  'context_without_identity',
+])
+
 export const dsrType = pgEnum('dsr_type', [
   'access',
   'rectify',
@@ -263,6 +278,13 @@ export const cell = pgTable(
     subjectId: uuid('subject_id').references(() => person.id, {
       onDelete: 'set null',
     }),
+    /**
+     * Set when detection could settle neither way. Guessing "person" mints a
+     * junk entity that degrades every query built on the person table;
+     * guessing "not a person" loses them from access and erasure. Neither is
+     * acceptable, so the doubt is written down for a human instead.
+     */
+    subjectUncertainty: subjectUncertainty('subject_uncertainty'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

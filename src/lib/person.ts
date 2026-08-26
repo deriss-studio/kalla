@@ -16,52 +16,175 @@ import type { Db } from '../db/client.js'
 import { cell, person, rowEntity } from '../db/schema.js'
 import { SUBJECT_REACH, redactableColumns } from '../db/value-bearing.js'
 
-export type PersonalDataCheck =
-  | { personal: false }
-  | { personal: true; canonicalKey: string; displayName: string | null }
+/**
+ * Two questions, deliberately separate.
+ *
+ *   CONTEXT — does this cell need personal-data handling at all? Retention,
+ *   special-category scanning, disclosure. Answered by the column's data class
+ *   and the row's kind. Context never mints an entity on its own: a column
+ *   declared `personal` full of city names must not manufacture a person per
+ *   city, because every junk entity degrades the very queries the person table
+ *   exists to make fast.
+ *
+ *   IDENTIFICATION — is there something here that identifies a specific human,
+ *   stably enough to resolve them across sheets? Answered by the value alone.
+ *   An email, a profile URL, a phone number, a name.
+ *
+ * A hint from the column's NAME lowers the identification threshold rather
+ * than sitting inert: "J Smith" in a column called Founder identifies someone;
+ * the same string in a column called Notes does not. A row whose kind is
+ * `person` lowers it the same way — declaring the row to BE an individual is a
+ * claim about the label, not merely handling context. It still mints nothing
+ * on its own: a person-kind row labelled "Candidate 4" identifies nobody.
+ *
+ * Where the value looks identifying but yields no stable key, neither answer
+ * is guessed. The doubt is recorded on the cell for a human.
+ */
 
-const EMAIL = /[\w.+-]+@[\w-]+\.[\w.]+/
-const PHONE = /(\+\d{1,3}[\s-]?)?(\(?\d{2,4}\)?[\s-]?){2,4}\d{2,4}/
-const PROFILE = /linkedin\.com\/in\/|x\.com\/|twitter\.com\/|github\.com\//i
-/** Two or more capitalised words, the crude shape of a personal name. */
-const NAME_SHAPE = /\b[A-ZÅÄÖÉ][a-zåäöé]+(?:\s+[A-ZÅÄÖÉ][a-zåäöé'-]+)+\b/
+export type IdentityKind = 'email' | 'profile' | 'phone' | 'name'
 
-/** Columns whose data class already tells us, without looking at the value. */
-const PERSON_COLUMN_HINT =
-  /\b(founder|ceo|cto|chair|contact|owner|manager|director|employee|candidate|person|name|email|phone|linkedin)\b/i
+export interface Identity {
+  kind: IdentityKind
+  /**
+   * The key resolution uses. Derived from an identifier, never from raw text —
+   * keying on the raw value split "Vera Exempel Testsson" and "Vera Exempel Testsson, CEO"
+   * into two people, which makes an Article 15 answer look complete while
+   * missing half of what is held.
+   */
+  key: string
+  displayName: string | null
+}
 
-export function detectPersonalData(input: {
-  value: string | null
+export type UncertaintyReason = 'ambiguous_identity' | 'context_without_identity'
+
+export interface Assessment {
+  /** Retention, special-category scanning, disclosure. */
+  personalHandling: boolean
+  /** Non-null when a specific human can be resolved from this value. */
+  identity: Identity | null
+  /** Non-null when neither answer could be settled, and a human should look. */
+  uncertainty: UncertaintyReason | null
+}
+
+export interface DataContext {
   columnName?: string
   columnDataClass?: string
   rowKind?: string
-}): PersonalDataCheck {
-  const { value, columnName, columnDataClass, rowKind } = input
-  if (!value?.trim()) return { personal: false }
+}
 
-  const declared =
-    columnDataClass === 'personal' ||
-    columnDataClass === 'special' ||
-    rowKind === 'person'
+const EMAIL = /[\w.+-]+@[\w-]+\.[A-Za-z]{2,}/
+const PROFILE =
+  /(?:https?:\/\/)?(?:[\w-]+\.)?(linkedin\.com\/in|x\.com|twitter\.com|github\.com)\/([A-Za-z0-9._-]+)/i
+/** At least seven digits, optionally internationalised. */
+const PHONE = /\+?\d[\d\s().-]{5,}\d/
+/** Two or more capitalised words: "Vera Exempel Testsson". */
+const NAME_STRICT =
+  /\b[A-ZÅÄÖÉ][a-zåäöé]+(?:\s+[A-ZÅÄÖÉ][a-zåäöé'\u2019-]+)+\b/
+/** An initial and a surname: "J Smith", "J. Smith". Only where a hint applies. */
+const NAME_WEAK = /\b[A-ZÅÄÖÉ]\.?\s+[A-ZÅÄÖÉ][a-zåäöé'\u2019-]{2,}\b/
 
-  const hinted = columnName ? PERSON_COLUMN_HINT.test(columnName) : false
-  const looksPersonal =
-    EMAIL.test(value) ||
-    PROFILE.test(value) ||
-    NAME_SHAPE.test(value) ||
-    (hinted && PHONE.test(value))
+/** Column names that make a person the expected content of the column. */
+const PERSON_COLUMN_HINT =
+  /\b(founder|ceo|cto|chair|contact|owner|manager|director|employee|candidate|person|name|email|phone|linkedin)\b/i
 
-  if (!declared && !hinted && !looksPersonal) return { personal: false }
-  if (!declared && !looksPersonal) return { personal: false }
+/** Does the column or row say this cell needs personal-data handling? */
+export function contextIsPersonal(ctx: DataContext): boolean {
+  return (
+    ctx.columnDataClass === 'personal' ||
+    ctx.columnDataClass === 'special' ||
+    ctx.rowKind === 'person'
+  )
+}
 
-  const email = value.match(EMAIL)?.[0]?.toLowerCase()
-  const name = value.match(NAME_SHAPE)?.[0]
-  const profile = value.match(PROFILE) ? value.trim().toLowerCase() : undefined
+/** Does the surrounding structure lower the bar for identifying someone? */
+export function identificationHint(ctx: DataContext): boolean {
+  return (
+    (ctx.columnName ? PERSON_COLUMN_HINT.test(ctx.columnName) : false) ||
+    ctx.rowKind === 'person'
+  )
+}
 
-  // Prefer a stable identifier for resolution; fall back to the name.
-  const canonicalKey = (email ?? profile ?? name ?? value).trim().toLowerCase()
+function digits(value: string): string {
+  return value.replace(/\D/g, '')
+}
 
-  return { personal: true, canonicalKey, displayName: name ?? null }
+/**
+ * What, if anything, in this value identifies a specific human.
+ *
+ * Emails and profile URLs identify on their own. Names and phone numbers do
+ * not: "New York" has the shape of a name and a switchboard number belongs to
+ * a company, so both need a hint from the surrounding structure before they
+ * are treated as identifying.
+ */
+export function identify(value: string, hinted: boolean): Identity | null {
+  const name = value.match(NAME_STRICT)?.[0] ?? null
+
+  const email = value.match(EMAIL)?.[0]
+  if (email) {
+    return { kind: 'email', key: `email:${email.toLowerCase()}`, displayName: name }
+  }
+
+  const profile = value.match(PROFILE)
+  if (profile) {
+    const platform = profile[1]!.toLowerCase()
+    const handle = profile[2]!.toLowerCase()
+    return { kind: 'profile', key: `profile:${platform}/${handle}`, displayName: name }
+  }
+
+  if (!hinted) return null
+
+  if (name) {
+    return {
+      kind: 'name',
+      key: `name:${name.toLowerCase().replace(/\s+/g, ' ').trim()}`,
+      displayName: name,
+    }
+  }
+
+  const weak = value.match(NAME_WEAK)?.[0]
+  if (weak) {
+    const normalised = weak.replace(/\./g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+    return { kind: 'name', key: `name:${normalised}`, displayName: weak }
+  }
+
+  const phone = value.match(PHONE)?.[0]
+  if (phone && digits(phone).length >= 7) {
+    return { kind: 'phone', key: `phone:${digits(phone)}`, displayName: name }
+  }
+
+  return null
+}
+
+/** Both questions, answered together. */
+export function assess(value: string | null, ctx: DataContext = {}): Assessment {
+  const handling = contextIsPersonal(ctx)
+  if (!value?.trim()) {
+    return { personalHandling: handling, identity: null, uncertainty: null }
+  }
+
+  const hinted = identificationHint(ctx)
+  const identity = identify(value, hinted)
+  if (identity) {
+    return { personalHandling: true, identity, uncertainty: null }
+  }
+
+  // Nothing resolved. Say so out loud where there was reason to expect someone,
+  // rather than choosing a side.
+  const looksIdentifying =
+    NAME_STRICT.test(value) || value.includes('@') || PROFILE.test(value)
+
+  let uncertainty: UncertaintyReason | null = null
+  if (looksIdentifying) {
+    uncertainty = 'ambiguous_identity'
+  } else if (handling || hinted) {
+    uncertainty = 'context_without_identity'
+  }
+
+  return {
+    personalHandling: handling || uncertainty !== null,
+    identity: null,
+    uncertainty,
+  }
 }
 
 /**
@@ -73,28 +196,35 @@ export function detectPersonalData(input: {
  * string — commitment 2 held for the agent and quietly failed for everyone
  * else.
  *
- * Returns the person's id, or null when the value is not about an individual.
+ * Returns the person's id when one could be identified, and the reason when
+ * one could not be settled either way. Callers record the second on the cell.
  */
 export async function resolveSubject(
   db: Db,
   workspaceId: string,
-  input: {
-    value: string | null
-    columnName?: string
-    columnDataClass?: string
-    rowKind?: string
-  },
+  input: DataContext & { value: string | null },
   retentionExpiresAt: Date | null,
-): Promise<string | null> {
-  const check = detectPersonalData(input)
-  if (!check.personal) return null
-  return resolvePerson(db, workspaceId, check, retentionExpiresAt)
+): Promise<{ subjectId: string | null; uncertainty: UncertaintyReason | null }> {
+  const { value, ...ctx } = input
+  const assessment = assess(value, ctx)
+
+  if (!assessment.identity) {
+    return { subjectId: null, uncertainty: assessment.uncertainty }
+  }
+
+  const subjectId = await resolvePerson(
+    db,
+    workspaceId,
+    assessment.identity,
+    retentionExpiresAt,
+  )
+  return { subjectId, uncertainty: null }
 }
 
 export async function resolvePerson(
   db: Db,
   workspaceId: string,
-  check: Extract<PersonalDataCheck, { personal: true }>,
+  identity: Identity,
   retentionExpiresAt: Date | null,
 ): Promise<string> {
   const existing = await db
@@ -103,7 +233,7 @@ export async function resolvePerson(
     .where(
       and(
         eq(person.workspaceId, workspaceId),
-        eq(person.canonicalKey, check.canonicalKey),
+        eq(person.canonicalKey, identity.key),
       ),
     )
     .limit(1)
@@ -114,8 +244,8 @@ export async function resolvePerson(
     .insert(person)
     .values({
       workspaceId,
-      canonicalKey: check.canonicalKey,
-      displayName: check.displayName,
+      canonicalKey: identity.key,
+      displayName: identity.displayName,
       retentionExpiresAt,
     })
     .returning({ id: person.id })

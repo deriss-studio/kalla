@@ -26,7 +26,14 @@ import {
   humanCorrectCell,
   writeCellValue,
 } from '../../src/lib/write.js'
-import { erasePerson } from '../../src/lib/person.js'
+import { assess, erasePerson } from '../../src/lib/person.js'
+import {
+  FLOORS,
+  IDENTIFYING,
+  JUNK,
+  UNCERTAIN,
+  VARIANTS,
+} from '../identity-corpus.js'
 import { cell, person, proposal, rowEntity } from '../../src/db/schema.js'
 
 let f: Fixture
@@ -54,9 +61,10 @@ describe('invariant: personal data is an entity at every write path', () => {
     // The regression this invariant exists for. A colleague typing a name is
     // introducing an individual just as much as an agent finding one.
     //
-    // A business column, so the starting value resolves nobody and the person
-    // who appears can only have come from the human's write.
-    f = await fixture()
+    // A hinted column — "Founder" — so a name is identifying here. The
+    // starting value resolves nobody, so the person who appears can only have
+    // come from the human's write.
+    f = await fixture({ columnName: 'Founder' })
 
     const { cellId } = await writeCellValue(
       { db: f.db, workspaceId: f.workspaceId, rowId: f.rowId, columnId: f.columnId },
@@ -75,7 +83,7 @@ describe('invariant: personal data is an entity at every write path', () => {
   })
 
   it('accepting a proposal resolves a person', async () => {
-    f = await fixture()
+    f = await fixture({ columnName: 'Founder' })
     const ctx = {
       db: f.db,
       workspaceId: f.workspaceId,
@@ -175,5 +183,102 @@ describe('invariant: personal data is an entity at every write path', () => {
       sql`SELECT count(*)::int AS n FROM row_entity WHERE label ILIKE ${'%' + SUBJECT + '%'}`,
     )
     expect(found.rows[0]!.n).toBe(0)
+  })
+})
+
+/**
+ * The corpus. Detection is a judgement, so it is measured rather than
+ * asserted — in both directions, because under-flagging loses a person and
+ * over-flagging manufactures one, and the second degrades every query the
+ * first was supposed to protect.
+ */
+describe('invariant: detection is held to a measured floor', () => {
+  it(`resolves every identifying value (floor ${FLOORS.identifyingResolved})`, () => {
+    const missed = IDENTIFYING.filter((c) => !assess(c.value, c.context).identity)
+    const rate = (IDENTIFYING.length - missed.length) / IDENTIFYING.length
+
+    expect(
+      rate,
+      `not identified: ${missed.map((m) => `"${m.value}" (${m.why})`).join('; ')}`,
+    ).toBeGreaterThanOrEqual(FLOORS.identifyingResolved)
+  })
+
+  it(`leaves every junk value alone (floor ${FLOORS.junkDisturbed})`, () => {
+    const disturbed = JUNK.filter((c) => {
+      const a = assess(c.value, c.context)
+      return a.identity !== null || a.uncertainty !== null
+    })
+    const rate = disturbed.length / JUNK.length
+
+    expect(
+      rate,
+      `treated as personal: ${disturbed
+        .map((d) => `"${d.value}" (${d.why})`)
+        .join('; ')}`,
+    ).toBeLessThanOrEqual(FLOORS.junkDisturbed)
+  })
+
+  it(`surfaces every genuine doubt (floor ${FLOORS.uncertaintySurfaced})`, () => {
+    const guessed = UNCERTAIN.filter((c) => {
+      const a = assess(c.value, c.context)
+      return a.identity !== null || a.uncertainty === null
+    })
+    const rate = (UNCERTAIN.length - guessed.length) / UNCERTAIN.length
+
+    expect(
+      rate,
+      `guessed instead of surfaced: ${guessed
+        .map((g) => `"${g.value}" (${g.why})`)
+        .join('; ')}`,
+    ).toBeGreaterThanOrEqual(FLOORS.uncertaintySurfaced)
+  })
+
+  it(`collapses every variant of one human (floor ${FLOORS.variantsCollapsed})`, () => {
+    const split = VARIANTS.filter((group) => {
+      const keys = new Set(
+        group.forms.map((f) => assess(f.value, f.context).identity?.key ?? f.value),
+      )
+      return keys.size !== 1
+    })
+    const rate = (VARIANTS.length - split.length) / VARIANTS.length
+
+    expect(
+      rate,
+      `split across entities: ${split.map((s) => s.why).join('; ')}`,
+    ).toBeGreaterThanOrEqual(FLOORS.variantsCollapsed)
+  })
+
+  it('never keys a person on raw text', async () => {
+    // The defect this replaced: "Vera Exempel Testsson, CEO" and "Vera Exempel Testsson"
+    // became two people, and an Article 15 answer looked complete while
+    // missing half of what was held.
+    f = await fixture({ columnName: 'Founder', dataClass: 'personal' })
+    const ctx = {
+      db: f.db,
+      workspaceId: f.workspaceId,
+      rowId: f.rowId,
+      columnId: f.columnId,
+    }
+
+    const first = await writeCellValue(ctx, sourced('Vera Exempel Testsson, CEO'))
+    await humanCorrectCell(f.db, f.workspaceId, first.cellId, 'Vera Exempel Testsson', 'soheill')
+
+    const all = await people(f)
+    expect(all, 'one human became two entities').toHaveLength(1)
+    expect(all[0]!.canonicalKey).not.toContain('ceo')
+  })
+
+  it('records the doubt on the cell rather than choosing a side', async () => {
+    f = await fixture()
+
+    const { cellId } = await writeCellValue(
+      { db: f.db, workspaceId: f.workspaceId, rowId: f.rowId, columnId: f.columnId },
+      sourced('Vera Exempel Testsson'),
+    )
+
+    const [row] = await f.db.select().from(cell).where(eq(cell.id, cellId))
+    expect(row!.subjectId, 'guessed a person from an unhinted column').toBeNull()
+    expect(row!.subjectUncertainty).toBe('ambiguous_identity')
+    expect(await people(f)).toHaveLength(0)
   })
 })

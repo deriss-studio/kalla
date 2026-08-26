@@ -49,8 +49,35 @@ Consequences that must hold:
   CNIL penalised in its Kaspr decision; treat it as a regression test, not a
   guideline.
 
-When personal-data detection is uncertain, flag it as personal. Over-flagging
-is cheap. Under-flagging is the failure mode that ends the company.
+Detection asks two separate questions and must not confuse them. **Context** —
+the column's data class, the row's kind — governs *handling*: retention,
+special-category scanning, disclosure. **Identification** — an email, a profile
+URL, a phone number, a name — governs *resolution*. Context never mints an
+entity on its own. A column declared `personal` full of city names must not
+manufacture a person per city. A hint from the column's name lowers the
+identification threshold rather than sitting inert: "J Smith" in a column
+called Founder identifies someone; the same string in a column called Notes
+does not.
+
+Detection has two failure directions and neither of them is cheap.
+
+- **Under-flagging is a compliance failure.** A person we hold and cannot
+  answer for: absent from an access response, surviving an erasure.
+- **Over-flagging is a data-quality failure**, and it degrades the compliance
+  queries themselves. "Everything we hold about this person" means nothing if
+  half the person table is cities and job titles.
+- **Uncertainty is surfaced, not guessed.** Where a value looks identifying and
+  yields no stable key, record the doubt on the cell and let a human decide.
+  Picking a side to avoid an awkward state is how both failures above get made.
+
+Resolution keys on an identifier, never on raw text. Keying on the raw value
+split "Vera Exempel Testsson" and "Vera Exempel Testsson, CEO" into two people, which is
+the worst failure of the three because it makes an Article 15 answer look
+complete while missing half of what is held.
+
+Detection is a judgement rather than a constraint, so it is held to a measured
+floor in both directions — see `test/identity-corpus.ts` and invariant 9. The
+floors may be raised. They must never be lowered to make a change pass.
 
 ### 3. Compliance is emergent, never a module
 
