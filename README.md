@@ -39,9 +39,28 @@ look for one name or the other; the specification only exists once.
 
 ```bash
 npm install
-npm test          # the seven invariants
+npm test          # the eleven invariants
 npm run typecheck
 ```
+
+## The walkthrough
+
+```bash
+npm run demo            # pauses between each moment, to talk over
+npm run demo -- --fast  # no pauses, for rehearsal
+```
+
+Six moments, in the order the argument is made: a filled sheet; one cell opened
+to show its source, time, model, region and expiry; every holding about one
+person across every sheet; an erasure followed by a scan of every text column in
+the database; a value argued with and resolved by a named human; and a cell that
+records that it does not know rather than guessing.
+
+It calls the real functions. The network and model inference are stubbed at the
+two seams the design already has — the `Fetcher` that `guardedFetch` takes, and
+the model adapter — and the walkthrough says so on screen. Anything it could not
+show through a real path is printed at the end under FINDINGS rather than
+staged.
 
 No database to install. Development and test run on PGlite — real Postgres
 compiled to WebAssembly, in process, isolated per test file. Production points
