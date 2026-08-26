@@ -1,0 +1,28 @@
+{
+  "name": "kalla",
+  "version": "0.0.1",
+  "description": "A European agentic spreadsheet. Every cell knows where it came from.",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.7",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.3.0",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  },
+  "type": "module",
+  "private": true
+}
