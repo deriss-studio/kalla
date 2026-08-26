@@ -22,7 +22,7 @@ import { eq, sql } from 'drizzle-orm'
 import { fixture, sourced, type Fixture } from '../harness.js'
 import { writeCellValue } from '../../src/lib/write.js'
 import { erasePerson } from '../../src/lib/person.js'
-import { cell, contest, person, proposal } from '../../src/db/schema.js'
+import { cell, contest, person, proposal, sheet } from '../../src/db/schema.js'
 import { SUBJECT_REACH, VALUE_BEARING } from '../../src/db/value-bearing.js'
 
 let f: Fixture
@@ -154,6 +154,39 @@ describe('invariant: erasure is total', () => {
     expect(
       missing,
       `these are NOT NULL and need a redactTo: ${missing.join(', ')}`,
+    ).toHaveLength(0)
+  })
+
+  it('keeps a retained column through an erasure, and nothing else', async () => {
+    f = await fixture({ columnName: 'Founder', dataClass: 'personal' })
+    const subjectId = await holdingsFor(f)
+
+    // A purpose that names the subject. Unusual, but it is precisely the case
+    // the classification exists for: the assessment of whether we may research
+    // this person is evidence we have to keep in order to defend having done
+    // it, and erasing it would destroy the proof that it was lawful.
+    await f.db
+      .update(sheet)
+      .set({ purpose: `Assess ${SUBJECT} for board suitability.` })
+      .where(eq(sheet.id, f.sheetId))
+
+    await erasePerson(f.db, subjectId)
+
+    // Exactly the retained column, and no other. This is the strong form: it
+    // proves the retention AND that everything else still went.
+    expect(await databaseContains(f, SUBJECT)).toEqual(['sheet.purpose'])
+  })
+
+  it('records a ground for every column retained through an erasure', () => {
+    // A retention without a ground is not a retention, it is a leak with a
+    // classification in front of it.
+    const ungrounded = VALUE_BEARING.filter(
+      (c) => c.classification === 'retained' && !c.ground?.trim(),
+    ).map((c) => `${c.table}.${c.column}`)
+
+    expect(
+      ungrounded,
+      `retained without a lawful ground: ${ungrounded.join(', ')}`,
     ).toHaveLength(0)
   })
 

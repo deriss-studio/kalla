@@ -16,15 +16,46 @@
 
 /**
  * - `subject`      — can hold the subject's own data. Erasure must reach it.
+ * - `retained`     — can hold the subject's data and is deliberately kept
+ *                    through an erasure, on a ground recorded against it.
+ *                    Retention is not silence: a retained column still has to
+ *                    appear in a subject access response, because the subject
+ *                    is entitled to know what survived their request and why.
  * - `unreachable`  — can hold the subject's data, and there is no path from a
  *                    person to it. A gap, named rather than hidden. This list
  *                    is pinned by the test: it may shrink, never grow.
  * - `actor`        — identifies a user of the system, not the person being
  *                    researched. Deliberately preserved: erasure has to stay
  *                    provable, and a resolution has to keep a name against it.
- * - `structural`   — schema or process metadata, holding no individual's data.
+ * - `structural`   — cannot contain an individual's data at all.
+ *
+ * `structural` is the easiest of these to reach for and the easiest to get
+ * wrong. It is a claim that the column CANNOT hold subject data, not that we
+ * would rather not erase it. Where the honest answer is "it can, and we are
+ * keeping it anyway", the classification is `retained` and the ground goes in
+ * writing.
  */
-export type Classification = 'subject' | 'unreachable' | 'actor' | 'structural'
+export type Classification =
+  | 'subject'
+  | 'retained'
+  | 'unreachable'
+  | 'actor'
+  | 'structural'
+
+/**
+ * Article 17(3) lifts the right to erasure where processing is necessary for
+ * compliance with a legal obligation and for the establishment, exercise or
+ * defence of legal claims.
+ *
+ * A legitimate interest assessment — and the purpose and prompt it assesses —
+ * is the evidence that the processing was lawful. Erasing it would destroy the
+ * controller's ability to demonstrate compliance under Article 5(2), which is
+ * the obligation the retention serves.
+ */
+export const ART_17_3 =
+  'GDPR Art. 17(3) — retention necessary for compliance with a legal ' +
+  'obligation (Art. 5(2) accountability) and for the establishment, exercise ' +
+  'or defence of legal claims'
 
 export interface ColumnClass {
   table: string
@@ -32,6 +63,11 @@ export interface ColumnClass {
   classification: Classification
   /** For NOT NULL subject columns, which cannot simply be nulled. */
   redactTo?: string
+  /**
+   * Required for `retained`. The lawful ground on which this column survives
+   * an erasure request. A retention without a ground is not a retention.
+   */
+  ground?: string
   /** Recorded wherever the classification was a judgement rather than obvious. */
   note?: string
 }
@@ -141,11 +177,9 @@ export const VALUE_BEARING: ColumnClass[] = [
   {
     table: 'sheet',
     column: 'purpose',
-    classification: 'structural',
-    note:
-      'controller-authored, not derived from research. It can name someone, ' +
-      'but redacting it would destroy the legitimate interest assessment ' +
-      'that depends on it. Governed as an input, not as a holding.',
+    classification: 'retained',
+    ground: ART_17_3,
+    note: 'the legitimate interest assessment is written against this purpose',
   },
 
   /* -------------------------------------------------------------- column */
@@ -154,8 +188,9 @@ export const VALUE_BEARING: ColumnClass[] = [
   {
     table: 'column',
     column: 'prompt',
-    classification: 'structural',
-    note: 'controller-authored, on the same reasoning as sheet.purpose',
+    classification: 'retained',
+    ground: ART_17_3,
+    note: 'the instruction that produced the values, and the evidence of what was asked',
   },
   { table: 'column', column: 'output_type', classification: 'structural' },
   { table: 'column', column: 'enum_values', classification: 'structural' },
@@ -172,10 +207,19 @@ export const VALUE_BEARING: ColumnClass[] = [
   { table: 'collection_log', column: 'reason', classification: 'structural' },
 
   /* ----------------------------------------------------------------- lia */
-  { table: 'lia', column: 'purpose', classification: 'structural' },
-  { table: 'lia', column: 'necessity', classification: 'structural' },
-  { table: 'lia', column: 'balancing', classification: 'structural' },
-  { table: 'lia', column: 'mitigations', classification: 'structural' },
+  /**
+   * The assessment itself. It weighs the interests of identifiable people and
+   * routinely names them, and it is the artefact a regulator asks for first.
+   */
+  { table: 'lia', column: 'purpose', classification: 'retained', ground: ART_17_3 },
+  { table: 'lia', column: 'necessity', classification: 'retained', ground: ART_17_3 },
+  { table: 'lia', column: 'balancing', classification: 'retained', ground: ART_17_3 },
+  {
+    table: 'lia',
+    column: 'mitigations',
+    classification: 'retained',
+    ground: ART_17_3,
+  },
   { table: 'lia', column: 'reviewed_by', classification: 'actor' },
 ]
 
