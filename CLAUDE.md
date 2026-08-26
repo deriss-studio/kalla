@@ -131,8 +131,29 @@ Keep that pattern when you add one.
    traces and logs.
 7. `blocked-domain-not-fetched` — mark a domain blocked; assert no fetch, no
    cached read, no mirror.
+8. `cell-belongs-to-workspace` — write with a mismatched workspace, and with a
+   row and a column from different sheets; assert both are refused and nothing
+   is persisted. Person entities are workspace-scoped, so a value written
+   under the wrong workspace resolves its subject into the wrong tenant, where
+   the owning workspace's access and erasure queries can no longer reach it.
 
 A pull request that adds a write path without extending test 1 is incomplete.
+
+### Proving a new invariant test
+
+An invariant test that has never failed has not been shown to test anything.
+Before adding one, remove the predicate it depends on, watch it fail, confirm
+it failed for the reason you intended rather than by accident, then restore
+the predicate and watch it pass.
+
+Where a guard has several predicates, remove them one at a time. A guard with
+two halves needs both proven separately, because the case that only the second
+half catches is precisely the one a reviewer assumes the first half already
+covered.
+
+Name the predicate you removed in the commit message. "Tested" is not a claim
+a reader can check; "removing the same-sheet predicate fails these two cases"
+is.
 
 ### How the harness runs them
 

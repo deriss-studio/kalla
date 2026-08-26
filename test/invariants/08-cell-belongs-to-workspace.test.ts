@@ -1,20 +1,25 @@
 /**
- * The write path refuses a cell outside its workspace.
+ * INVARIANT 8 — A cell belongs to the caller's workspace.
  *
- * An ordinary test, not one of the seven — the seven are the commitments, and
- * adding to that list is a decision about the specification rather than about
- * this fix. It may well belong there: person entities are workspace-scoped, so
- * a value written under the wrong workspace resolves its subject into the
- * wrong tenant, where the owning workspace's access and erasure queries can no
- * longer see it. That is commitment 2 failing quietly, from nothing worse than
- * a caller passing the wrong argument.
+ * Person entities are workspace-scoped, so a value written under the wrong
+ * workspace resolves its subject into the wrong tenant, where the owning
+ * workspace's access and erasure queries can no longer reach it. That is
+ * commitment 2 failing quietly, from nothing worse than a caller passing the
+ * wrong argument.
+ *
+ * The guard has two halves and needs both. The row and the column must share
+ * a sheet, and that sheet must belong to the workspace: a workspace-only
+ * check still admits a column from one tenant paired with a row from another,
+ * because the column on its own satisfies it. Each half is proven separately
+ * below, and each was verified by removing its predicate and watching only
+ * the matching cases fail.
  */
 
 import { describe, it, expect } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { fixture, sourced, type Fixture } from './harness.js'
-import { writeCellValue, humanCorrectCell } from '../src/lib/write.js'
-import { cell, column, rowEntity, sheet, workspace } from '../src/db/schema.js'
+import { fixture, sourced, type Fixture } from '../harness.js'
+import { writeCellValue, humanCorrectCell } from '../../src/lib/write.js'
+import { cell, column, rowEntity, sheet, workspace } from '../../src/db/schema.js'
 
 let f: Fixture
 
