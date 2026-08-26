@@ -86,6 +86,10 @@ export function blank(): void {
 
 /** A plain aligned table. Inner borders cost legibility at a distance. */
 export function table(headers: string[], rows: string[][]): void {
+  if (rows.length === 0) {
+    console.log('    ' + dim('none'))
+    return
+  }
   const widths = headers.map((h, i) =>
     Math.max(h.length, ...rows.map((r) => (r[i] ?? '').length)),
   )
@@ -110,6 +114,59 @@ export async function pause(label = 'Enter to continue'): Promise<void> {
       resolve()
     })
   })
+}
+
+/** For a reader, not a log. 2026-08-26 23:08 UTC. */
+export function when(value: Date | null | undefined): string {
+  if (!value) return '--'
+  const iso = value.toISOString()
+  return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`
+}
+
+/**
+ * A table whose last column wraps instead of truncating, for content that is
+ * a sentence rather than a label. Continuation lines are indented under the
+ * column so the eye can follow one row down the page.
+ */
+export function tableWrapped(headers: string[], rows: string[][]): void {
+  if (rows.length === 0) {
+    console.log('    ' + dim('none'))
+    return
+  }
+  const last = headers.length - 1
+  const fixed = headers.slice(0, last).map((h, i) =>
+    Math.max(h.length, ...rows.map((r) => (r[i] ?? '').length)),
+  )
+  const used = fixed.reduce((a, b) => a + b + 3, 0)
+  const room = Math.max(24, W - used - 6)
+
+  const lead = (cells: string[], paint: (s: string) => string) =>
+    cells.map((c, i) => paint((c ?? '').padEnd(fixed[i]!))).join('   ')
+
+  console.log('  ' + lead(headers.slice(0, last).map((h) => h.toUpperCase()), dim) +
+    '   ' + dim(headers[last]!.toUpperCase()))
+  console.log('  ' + fixed.map((w) => dim('-'.repeat(w))).join('   ') +
+    '   ' + dim('-'.repeat(room)))
+
+  for (const r of rows) {
+    const words = (r[last] ?? '').split(/\s+/)
+    const lines: string[] = []
+    let current = ''
+    for (const word of words) {
+      if (current && (current + ' ' + word).length > room) {
+        lines.push(current)
+        current = word
+      } else {
+        current = current ? current + ' ' + word : word
+      }
+    }
+    lines.push(current)
+
+    lines.forEach((line, i) => {
+      const cells = i === 0 ? r.slice(0, last) : fixed.map(() => '')
+      console.log('  ' + lead(cells, (x) => x) + '   ' + line)
+    })
+  }
 }
 
 export function truncate(value: string, max: number): string {

@@ -39,6 +39,8 @@ import {
   amber,
   banner,
   rule,
+  tableWrapped,
+  when,
   blank,
   bold,
   cyan,
@@ -64,7 +66,7 @@ const WEB: Record<string, string> = {
   'https://testbolaget.example/about':
     `<h1>Testbolaget AB</h1><p>Founded in Stockholm by ${SUBJECT}.</p>`,
   'https://testbolaget.example/team': `<p>${SUBJECT}, chief executive.</p>`,
-  'https://vindkraft.example/about': '<h1>Vindkraft Nordic AB</h1><p>Based in Malmo.</p>',
+  'https://vindkraft.example/about': '<h1>Vindkraft Nordic AB</h1><p>Based in Malmö.</p>',
   'https://solstrale.example/about': '<h1>Solstrale Energi AB</h1><p>Based in Uppsala.</p>',
 }
 
@@ -159,8 +161,8 @@ async function seed(): Promise<Seed> {
 
   const companies = [
     { label: 'Testbolaget AB', url: 'https://testbolaget.example/about', hq: 'Stockholm', founder: SUBJECT },
-    { label: 'Vindkraft Nordic AB', url: 'https://vindkraft.example/about', hq: 'Malmo', founder: 'Nora Testberg' },
-    { label: 'Solstrale Energi AB', url: 'https://solstrale.example/about', hq: 'Uppsala', founder: 'Anna-Karin Ovningsson' },
+    { label: 'Vindkraft Nordic AB', url: 'https://vindkraft.example/about', hq: 'Malmö', founder: 'Nora Testberg' },
+    { label: 'Solstråle Energi AB', url: 'https://solstrale.example/about', hq: 'Uppsala', founder: 'Anna-Karin Övningsson' },
   ]
 
   const hqCellOf: Record<string, string> = {}
@@ -248,21 +250,24 @@ async function readSheet(db: Db, sheetId: string) {
 /**
  * Demo-local, and written for the third time. See FINDINGS.
  */
-async function databaseContains(db: Db, needle: string): Promise<string[]> {
+async function databaseContains(
+  db: Db,
+  needle: string,
+): Promise<{ scanned: number; found: string[] }> {
   const cols = await db.execute<{ table_name: string; column_name: string }>(sql`
     SELECT table_name, column_name FROM information_schema.columns
     WHERE table_schema = 'public'
       AND data_type IN ('text','character varying','jsonb','json')
   `)
-  const hits: string[] = []
+  const found: string[] = []
   for (const c of cols.rows) {
-    const found = await db.execute<{ n: number }>(
+    const hit = await db.execute<{ n: number }>(
       sql`SELECT count(*)::int AS n FROM ${sql.identifier(c.table_name)}
           WHERE ${sql.identifier(c.column_name)}::text ILIKE ${'%' + needle + '%'}`,
     )
-    if ((found.rows[0]?.n ?? 0) > 0) hits.push(`${c.table_name}.${c.column_name}`)
+    if ((hit.rows[0]?.n ?? 0) > 0) found.push(`${c.table_name}.${c.column_name}`)
   }
-  return hits
+  return { scanned: cols.rows.length, found }
 }
 
 async function momentSheet(s: Seed): Promise<void> {
@@ -281,22 +286,16 @@ async function momentSheet(s: Seed): Promise<void> {
   const cellAt = (rowId: string, columnId: string) =>
     cells.find((x) => x.rowId === rowId && x.columnId === columnId)
 
-  const valueWidth = cols.map((c) =>
-    Math.min(
-      26,
-      Math.max(6, ...rows.map((r) => truncate(cellAt(r.id, c.id)?.value ?? '--', 26).length)),
-    ),
-  )
-
+  // A bare value is a filled value. Repeating "filled" down every column
+  // buries the two states that are actually saying something.
   const header = ['Company', ...cols.map((c) => c.name)]
   const body = rows.map((r) => [
     r.label,
-    ...cols.map((c, i) => {
+    ...cols.map((c) => {
       const found = cellAt(r.id, c.id)
-      if (!found) return dim('empty')
-      const value = truncate(found.value ?? '--', 26).padEnd(valueWidth[i]!)
-      const state = found.state === 'filled' ? dim(found.state) : amber(found.state)
-      return `${value}  ${state}`
+      if (!found) return amber('empty')
+      if (found.state === 'filled') return truncate(found.value ?? '', 26)
+      return amber(found.state)
     }),
   ])
   table(header, body)
@@ -317,7 +316,7 @@ async function momentCell(s: Seed): Promise<void> {
   field('Value', bold(c!.value ?? ''))
   blank()
   field('Source', p!.sourceUrl)
-  field('Retrieved', p!.retrievedAt.toISOString())
+  field('Retrieved', when(p!.retrievedAt))
   field('Fetched by', p!.crawlerId)
   field('robots.txt at fetch', p!.robotsState)
   field('ai.txt at fetch', p!.aiTxtState)
@@ -325,7 +324,7 @@ async function momentCell(s: Seed): Promise<void> {
   field('Model', p!.modelId ?? '')
   field('Model region', green(p!.modelRegion ?? ''))
   blank()
-  field('Retention expires', c!.retentionExpiresAt?.toISOString() ?? '')
+  field('Retention expires', when(c!.retentionExpiresAt))
   field('Concerns a person', c!.subjectId ? green('yes, resolved to an entity') : 'no')
 
   point('None of this was typed by anyone. It is the record the value was written with.')
@@ -339,7 +338,7 @@ async function momentAccess(s: Seed): Promise<void> {
 
   field('Subject', bold(pack.subject.displayName ?? ''))
   field('Lawful basis', pack.subject.lawfulBasis)
-  field('First seen', pack.subject.firstSeenAt.toISOString())
+  field('First seen', when(pack.subject.firstSeenAt))
   blank()
 
   note('Values held about them')
@@ -362,22 +361,20 @@ async function momentAccess(s: Seed): Promise<void> {
   blank()
 
   note('Kept even through an erasure request')
-  table(
-    ['Held', 'In sheet', 'Which reads'],
-    pack.retained
-      .slice(0, 4)
-      .map((r) => [
-        `${r.table}.${r.column}`,
-        truncate(r.sheetName, 24),
-        truncate(r.value, 34),
-      ]),
-  )
-  blank()
-  for (const ground of new Set(pack.retained.map((r) => r.ground))) {
-    fieldWrapped('Ground', ground.replace(/ — /, ' - '))
+  if (pack.retained.length === 0) {
+    console.log('    ' + green('nothing') + dim('  -  every field naming this person is erasable'))
+  } else {
+    tableWrapped(
+      ['Held', 'In sheet', 'Which reads'],
+      pack.retained.map((r) => [`${r.table}.${r.column}`, r.sheetName, r.value]),
+    )
+    blank()
+    for (const ground of new Set(pack.retained.map((r) => r.ground))) {
+      fieldWrapped('Ground', ground.replace(/ — /, ' - '))
+    }
   }
 
-  point('One query, every sheet, and it says what it keeps as well as what it holds.')
+  point('One query, every sheet: values, rows, arguments, and what would outlive an erasure.')
   note('Nobody assembled this. It is derived from the substrate.')
 }
 
@@ -385,17 +382,19 @@ async function momentErasure(s: Seed): Promise<void> {
   step('ERASURE, AND THE PROOF')
 
   const before = await databaseContains(s.db, SUBJECT)
-  note('Before: the name appears in')
-  for (const hit of before) console.log('    ' + amber(hit))
+  note(`Before: the name appears in ${bold(String(before.found.length))} places`)
+  for (const hit of before.found) console.log('    ' + amber(hit))
   blank()
 
   await erasePerson(s.db, s.subjectId)
 
-  const after = await databaseContains(s.db, SUBJECT)
-  note('After erasure, scanning every text column in every table:')
+  const { scanned, found: after } = await databaseContains(s.db, SUBJECT)
+  note(
+    `After erasure, scanning all ${bold(String(scanned))} text columns in the database:`,
+  )
   blank()
   if (after.length === 0) {
-    console.log('    ' + green(bold('nothing. no table, no column, no row.')))
+    console.log('    ' + green(bold('0 places. no table, no column, no row.')))
   } else {
     for (const hit of after) console.log('    ' + amber(hit))
   }
@@ -403,7 +402,7 @@ async function momentErasure(s: Seed): Promise<void> {
 
   const [tomb] = await s.db.select().from(person).where(eq(person.id, s.subjectId))
   field('Person record', `${tomb!.erasureState}, name removed`)
-  field('Erased at', tomb!.erasedAt?.toISOString() ?? '')
+  field('Erased at', when(tomb!.erasedAt))
 
   point('The scan is the whole database, not the tables we remembered to clear.')
   note('What survives is the tombstone: proof the erasure happened, holding nothing about them.')
@@ -460,7 +459,7 @@ async function momentUncertain(s: Seed): Promise<void> {
 
   const { rows, cols } = await readSheet(s.db, s.marketSheet)
   const notesCol = cols.find((c) => c.key === 'notes')!
-  const row = rows.find((r) => r.label === 'Solstrale Energi AB')!
+  const row = rows.find((r) => r.label === 'Solstråle Energi AB')!
 
   const fetched = await guardedFetch(
     s.db,
@@ -557,7 +556,7 @@ async function main(): Promise<void> {
   await pause()
   await momentUncertain(s)
 
-  findings()
+  if (process.argv.includes('--findings')) findings()
   process.exit(0)
 }
 
