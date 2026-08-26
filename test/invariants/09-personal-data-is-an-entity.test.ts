@@ -268,6 +268,41 @@ describe('invariant: detection is held to a measured floor', () => {
     expect(all[0]!.canonicalKey).not.toContain('ceo')
   })
 
+  it('records the doubt on an unresolved person-kind row', async () => {
+    // A row declared to be a person that resolves nobody used to carry
+    // nothing, which is indistinguishable from a row that is not about a
+    // person at all. That is a silent miss in a subject access response — the
+    // failure class that matters most — so it must land before any sheet of
+    // people is shown to anyone.
+    f = await fixture({ declaredUse: 'employment_screening' })
+
+    const { rowId, subjectId, uncertainty } = await createRow(
+      f.db,
+      f.workspaceId,
+      f.sheetId,
+      { label: 'Candidate 4', kind: 'person' },
+    )
+
+    expect(subjectId, 'minted an entity from a label identifying nobody').toBeNull()
+    expect(uncertainty).toBe('context_without_identity')
+
+    const [row] = await f.db.select().from(rowEntity).where(eq(rowEntity.id, rowId))
+    expect(row!.subjectUncertainty).toBe('context_without_identity')
+  })
+
+  it('leaves a resolved row with nothing to flag', async () => {
+    f = await fixture({ declaredUse: 'employment_screening' })
+
+    const { rowId, subjectId } = await createRow(f.db, f.workspaceId, f.sheetId, {
+      label: SUBJECT,
+      kind: 'person',
+    })
+    expect(subjectId).toBeTruthy()
+
+    const [row] = await f.db.select().from(rowEntity).where(eq(rowEntity.id, rowId))
+    expect(row!.subjectUncertainty).toBeNull()
+  })
+
   it('records the doubt on the cell rather than choosing a side', async () => {
     f = await fixture()
 

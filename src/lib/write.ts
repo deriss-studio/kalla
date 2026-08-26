@@ -19,7 +19,7 @@ import {
   workspace,
 } from '../db/schema.js'
 import { checkSpecialCategory } from './special.js'
-import { resolveSubject } from './person.js'
+import { resolveSubject, type UncertaintyReason } from './person.js'
 import {
   assertNotBlockedEvidence,
   decisionFor,
@@ -274,7 +274,11 @@ export async function createRow(
   workspaceId: string,
   sheetId: string,
   input: { label: string; kind?: string; position?: number },
-): Promise<{ rowId: string; subjectId: string | null }> {
+): Promise<{
+  rowId: string
+  subjectId: string | null
+  uncertainty: UncertaintyReason | null
+}> {
   return db.transaction(async (tx) => {
     const [owner] = await tx
       .select({ retentionDays: workspace.defaultRetentionDays })
@@ -290,10 +294,7 @@ export async function createRow(
     }
 
     const kind = input.kind ?? 'organisation'
-    // A row has nowhere to record doubt yet, so an unresolved person-kind row
-    // simply carries no subject. Noted rather than hidden: the uncertainty
-    // column exists on cell only.
-    const { subjectId } = await resolveSubject(
+    const { subjectId, uncertainty } = await resolveSubject(
       tx as unknown as Db,
       workspaceId,
       { value: input.label, rowKind: kind },
@@ -307,11 +308,12 @@ export async function createRow(
         label: input.label,
         kind,
         subjectId,
+        subjectUncertainty: uncertainty,
         position: input.position ?? 0,
       })
       .returning({ id: rowEntity.id })
 
-    return { rowId: row!.id, subjectId }
+    return { rowId: row!.id, subjectId, uncertainty }
   })
 }
 

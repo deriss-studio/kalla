@@ -205,6 +205,13 @@ export const rowEntity = pgTable(
     subjectId: uuid('subject_id').references(() => person.id, {
       onDelete: 'set null',
     }),
+    /**
+     * The same doubt a cell can record, for the same reason. A person-kind row
+     * that resolved nobody used to carry nothing at all, which reads exactly
+     * like a row that is not about a person — and an unresolved row is a
+     * silent miss in a subject access response.
+     */
+    subjectUncertainty: subjectUncertainty('subject_uncertainty'),
     position: integer('position').notNull().default(0),
   },
   (t) => [

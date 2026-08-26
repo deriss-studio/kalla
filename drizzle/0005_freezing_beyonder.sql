@@ -1,0 +1,1 @@
+ALTER TABLE "row_entity" ADD COLUMN "subject_uncertainty" "subject_uncertainty";
