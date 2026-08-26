@@ -145,8 +145,8 @@ async function seed(): Promise<Seed> {
     'market_mapping',
   )
   const boardSheet = await makeSheet(
-    'Advisory board candidates',
-    'Assess candidates for a client advisory board appointment.',
+    'Advisory board appointment',
+    `Assess ${SUBJECT} for a client advisory board appointment, at the client's request.`,
     'employment_screening',
   )
 
@@ -310,7 +310,14 @@ async function momentCell(s: Seed): Promise<void> {
   note('There is no code path that writes a value without it.')
 }
 
-async function momentAccess(s: Seed): Promise<void> {
+/** What moment 3 says will outlive an erasure, for moment 4 to check. */
+interface Prediction {
+  locations: string[]
+  ground: string
+  detail: string
+}
+
+async function momentAccess(s: Seed): Promise<Prediction> {
   step('EVERYTHING WE HOLD ABOUT ONE PERSON')
 
   const pack = await subjectAccessPack(s.db, s.subjectId)
@@ -339,25 +346,30 @@ async function momentAccess(s: Seed): Promise<void> {
   )
   blank()
 
-  note('Kept even through an erasure request')
-  if (pack.retained.length === 0) {
-    console.log('    ' + green('nothing') + dim('  -  every field naming this person is erasable'))
-  } else {
-    tableWrapped(
-      ['Held', 'In sheet', 'Which reads'],
-      pack.retained.map((r) => [`${r.table}.${r.column}`, r.sheetName, r.value]),
-    )
-    blank()
-    for (const ground of new Set(pack.retained.map((r) => r.ground))) {
-      fieldWrapped('Ground', ground.replace(/ — /, ' - '))
-    }
-  }
+  note('Which of those would outlive an erasure request')
+  tableWrapped(
+    ['Held', 'In sheet', 'Which reads'],
+    pack.retained.map((r) => [`${r.table}.${r.column}`, r.sheetName, r.value]),
+  )
+  blank()
 
-  point('One query, every sheet: values, rows, arguments, and what would outlive an erasure.')
+  const locations = [...new Set(pack.retained.map((r) => `${r.table}.${r.column}`))]
+  const ground = pack.retained[0]?.ground.replace(/ — /, ' - ') ?? ''
+  const detail = pack.retained[0]?.sheetName ?? ''
+
+  // The prediction, said out loud before anything is erased. Moment 4 does not
+  // restate this; it checks it.
+  field('If she asks to be erased', bold(`${locations.length} field survives`))
+  field('Which', bold(locations.join(', ')) + dim(`   in "${detail}"`))
+  fieldWrapped('On the ground of', ground)
+
+  point('It can tell her, in advance, exactly what it would not be able to delete.')
   note('Nobody assembled this. It is derived from the substrate.')
+
+  return { locations, ground, detail }
 }
 
-async function momentErasure(s: Seed): Promise<void> {
+async function momentErasure(s: Seed, predicted: Prediction): Promise<void> {
   step('ERASURE, AND THE PROOF')
 
   const before = await scanForValue(s.db, SUBJECT)
@@ -367,15 +379,39 @@ async function momentErasure(s: Seed): Promise<void> {
 
   await erasePerson(s.db, s.subjectId)
 
-  const { scanned, found: after } = await scanForValue(s.db, SUBJECT)
-  note(
-    `After erasure, scanning all ${bold(String(scanned))} text columns in the database:`,
+  const { scanned, found } = await scanForValue(s.db, SUBJECT)
+  note(`After erasure, scanning all ${bold(String(scanned))} text columns:`)
+  blank()
+  console.log(
+    '    ' +
+      bold(`${found.length} of ${scanned}`) +
+      '    ' +
+      (found.length ? found.join(', ') : green('nothing')),
   )
   blank()
-  if (after.length === 0) {
-    console.log('    ' + green(bold('0 places. no table, no column, no row.')))
+
+  // The claim is not that little survived. It is that the system said which
+  // field would survive before it ran, and was exactly right.
+  const expected = [...predicted.locations].sort().join(', ')
+  const actual = [...found].sort().join(', ')
+
+  field('Predicted, one step ago', expected || '(nothing)')
+  field('Actually found', actual || '(nothing)')
+  fieldWrapped('On the ground of', predicted.ground)
+  blank()
+
+  if (expected === actual) {
+    console.log(
+      '    ' + green(bold('The prediction was exact. Nothing survived that was not named.')),
+    )
   } else {
-    for (const hit of after) console.log('    ' + amber(hit))
+    console.log('    ' + amber(bold('MISMATCH - the system did not know itself:')))
+    for (const hit of found.filter((h) => !predicted.locations.includes(h))) {
+      console.log('      ' + amber(`unexpected survivor: ${hit}`))
+    }
+    for (const miss of predicted.locations.filter((h) => !found.includes(h))) {
+      console.log('      ' + amber(`predicted but gone: ${miss}`))
+    }
   }
   blank()
 
@@ -383,8 +419,8 @@ async function momentErasure(s: Seed): Promise<void> {
   field('Person record', `${tomb!.erasureState}, name removed`)
   field('Erased at', when(tomb!.erasedAt))
 
-  point('The scan is the whole database, not the tables we remembered to clear.')
-  note('What survives is the tombstone: proof the erasure happened, holding nothing about them.')
+  point('Not that one field survived. That it named the field before it ran.')
+  note('A system that reports zero is easy to fake. One that predicts itself is not.')
 }
 
 async function momentContest(s: Seed): Promise<void> {
@@ -521,9 +557,9 @@ async function main(): Promise<void> {
   await pause()
   await momentCell(s)
   await pause()
-  await momentAccess(s)
+  const predicted = await momentAccess(s)
   await pause()
-  await momentErasure(s)
+  await momentErasure(s, predicted)
   await pause()
   await momentContest(s)
   await pause()
