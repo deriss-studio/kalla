@@ -30,6 +30,9 @@ src/lib/classify.ts     AI Act risk class, per sheet, by declared use
 test/invariants/        the eight tests that are the specification
 ```
 
+`AGENTS.md` is a symlink to `CLAUDE.md`, so the two cannot drift. Coding agents
+look for one name or the other; the specification only exists once.
+
 ## Running it
 
 ```bash
