@@ -43,6 +43,13 @@
       "when": 1787776154116,
       "tag": "0005_freezing_beyonder",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787776246680,
+      "tag": "0006_funny_next_avengers",
+      "breakpoints": true
     }
   ]
 }

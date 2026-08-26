@@ -478,6 +478,37 @@ export const lia = pgTable(
   (t) => [uniqueIndex('lia_sheet_version_idx').on(t.sheetId, t.version)],
 )
 
+/* ------------------------------------------------------------- expiry log */
+
+/**
+ * Proof that expired data was deleted, and when.
+ *
+ * Deliberately built from identifiers and timestamps alone. There is no text
+ * column here and there must never be one: a log that records the deletion of
+ * personal data must not become the last place that personal data survives.
+ * The value is gone; what remains is that a cell existed, that its clock ran
+ * out, and that it was removed.
+ */
+export const expiryLog = pgTable(
+  'expiry_log',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspace.id, { onDelete: 'cascade' }),
+    /** No foreign key: the cell is gone, which is the point. */
+    cellId: uuid('cell_id').notNull(),
+    sheetId: uuid('sheet_id').notNull(),
+    /** Whether the deleted cell concerned an identifiable individual. */
+    hadSubject: boolean('had_subject').notNull().default(false),
+    retentionExpiredAt: timestamp('retention_expired_at', {
+      withTimezone: true,
+    }).notNull(),
+    sweptAt: timestamp('swept_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('expiry_workspace_idx').on(t.workspaceId)],
+)
+
 /* -------------------------------------------------------------------- dsr */
 
 export const dsr = pgTable(

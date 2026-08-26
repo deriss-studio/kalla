@@ -11,7 +11,9 @@ import { describe, it, expect } from 'vitest'
 import { eq, sql } from 'drizzle-orm'
 import { fixture, sourced, rejectionMessage, type Fixture } from '../harness.js'
 import { writeCellValue } from '../../src/lib/write.js'
-import { cell } from '../../src/db/schema.js'
+import { erasePerson } from '../../src/lib/person.js'
+import { sweepExpired } from '../../src/lib/retention.js'
+import { cell, expiryLog, person } from '../../src/db/schema.js'
 
 let f: Fixture
 
@@ -100,5 +102,140 @@ describe('invariant: refresh preserves retention', () => {
 
     const after = await expiryOf(f, cellId)
     expect(after!.getTime()).toBeGreaterThan(before!.getTime())
+  })
+})
+
+/**
+ * The other half of Kaspr. The trigger above stops the clock being renewed;
+ * this stops the clock being decorative. A retention period that nothing acts
+ * on is not a retention period — Kaspr's contacts were kept "five years from
+ * each update", and the finding was as much that nothing was ever deleted as
+ * that the clock kept moving.
+ *
+ * Expiry deletes. The proof is the same whole-database scan the erasure test
+ * uses, because "archived", "tombstoned" and "soft-deleted" are all ways of
+ * keeping a value while describing it differently.
+ */
+describe('invariant: retention that has expired is deleted', () => {
+  const SUBJECT = 'Vera Exempel Testsson'
+
+  /** Every text-ish column in every table, scanned for the value. */
+  async function databaseContains(f: Fixture, needle: string): Promise<string[]> {
+    const cols = await f.db.execute<{ table_name: string; column_name: string }>(sql`
+      SELECT table_name, column_name FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND data_type IN ('text','character varying','jsonb','json')
+    `)
+    const hits: string[] = []
+    for (const c of cols.rows) {
+      const found = await f.db.execute<{ n: number }>(
+        sql`SELECT count(*)::int AS n FROM ${sql.identifier(c.table_name)}
+            WHERE ${sql.identifier(c.column_name)}::text ILIKE ${'%' + needle + '%'}`,
+      )
+      if ((found.rows[0]?.n ?? 0) > 0) hits.push(`${c.table_name}.${c.column_name}`)
+    }
+    return hits
+  }
+
+  /** Move a cell's clock into the past, through the auditable override. */
+  async function backdate(f: Fixture, cellId: string) {
+    await f.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT set_config('app.retention_override', 'on', true)`)
+      await tx.execute(sql`
+        UPDATE cell SET retention_expires_at = now() - interval '1 day'
+        WHERE id = ${cellId}::uuid
+      `)
+    })
+  }
+
+  it('deletes an expired cell, and its value survives nowhere', async () => {
+    f = await fixture({ columnName: 'Founder', dataClass: 'personal' })
+    const ctx = {
+      db: f.db,
+      workspaceId: f.workspaceId,
+      rowId: f.rowId,
+      columnId: f.columnId,
+    }
+
+    const { cellId, subjectId } = await writeCellValue(ctx, sourced(SUBJECT))
+    expect(subjectId).toBeTruthy()
+
+    // Present in more than one table before the sweep, or this proves nothing
+    // about the tables it forgot.
+    expect(await databaseContains(f, SUBJECT)).toEqual(
+      expect.arrayContaining(['cell.value', 'provenance.quote', 'person.display_name']),
+    )
+
+    await backdate(f, cellId)
+    const swept = await sweepExpired(f.db, f.workspaceId)
+    expect(swept.cellsDeleted).toBe(1)
+
+    const hits = await databaseContains(f, SUBJECT)
+    expect(hits, `expired value survived in: ${hits.join(', ')}`).toHaveLength(0)
+
+    // Deleted, not marked. There is no row left to describe.
+    expect(await f.db.select().from(cell)).toHaveLength(0)
+  })
+
+  it('logs the deletion without becoming the last place the data lives', async () => {
+    f = await fixture({ columnName: 'Founder', dataClass: 'personal' })
+
+    const { cellId } = await writeCellValue(
+      { db: f.db, workspaceId: f.workspaceId, rowId: f.rowId, columnId: f.columnId },
+      sourced(SUBJECT),
+    )
+    await backdate(f, cellId)
+    await sweepExpired(f.db, f.workspaceId)
+
+    const [logged] = await f.db.select().from(expiryLog)
+    expect(logged!.cellId).toBe(cellId)
+    expect(logged!.sheetId).toBe(f.sheetId)
+    expect(logged!.hadSubject).toBe(true)
+    expect(logged!.sweptAt).toBeInstanceOf(Date)
+
+    // The log records that a holding existed and went. It carries no text at
+    // all, so it cannot carry what the holding said.
+    const textColumns = await f.db.execute<{ n: number }>(sql`
+      SELECT count(*)::int AS n FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'expiry_log'
+        AND data_type IN ('text','character varying','jsonb','json')
+    `)
+    expect(textColumns.rows[0]!.n).toBe(0)
+  })
+
+  it('leaves a cell whose clock has not run out', async () => {
+    f = await fixture({ retentionDays: 30 })
+
+    const { cellId } = await writeCellValue(
+      { db: f.db, workspaceId: f.workspaceId, rowId: f.rowId, columnId: f.columnId },
+      sourced('Stockholm'),
+    )
+
+    const swept = await sweepExpired(f.db, f.workspaceId)
+    expect(swept.cellsDeleted).toBe(0)
+
+    const [row] = await f.db.select().from(cell).where(eq(cell.id, cellId))
+    expect(row!.value).toBe('Stockholm')
+    expect(await f.db.select().from(expiryLog)).toHaveLength(0)
+  })
+
+  it('keeps an erasure tombstone through a sweep', async () => {
+    // An orphaned person goes. A person who was erased on request does not:
+    // their row is the proof the erasure happened, and it has to outlive the
+    // data it describes.
+    f = await fixture({ columnName: 'Founder', dataClass: 'personal' })
+
+    const { cellId, subjectId } = await writeCellValue(
+      { db: f.db, workspaceId: f.workspaceId, rowId: f.rowId, columnId: f.columnId },
+      sourced(SUBJECT),
+    )
+    await erasePerson(f.db, subjectId!)
+    await backdate(f, cellId)
+
+    await sweepExpired(f.db, f.workspaceId)
+
+    const [tomb] = await f.db.select().from(person)
+    expect(tomb, 'the erasure tombstone was swept away').toBeTruthy()
+    expect(tomb!.erasureState).toBe('erased')
   })
 })

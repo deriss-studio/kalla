@@ -149,7 +149,12 @@ asserts the database still refuses. Keep that pattern when you add one.
 1. `no-value-without-provenance` — insert a cell value by every available code
    path; assert each produces a provenance row.
 2. `refresh-preserves-retention` — refresh a cell; assert
-   `retention_expires_at` is unchanged.
+   `retention_expires_at` is unchanged. And the other half of the same
+   finding: sweep expired cells and assert the value survives nowhere, by the
+   whole-database scan invariant 3 uses. A clock that cannot be renewed but is
+   never acted on leaves Kaspr half-fixed. Expiry deletes rather than archives
+   — "archived", "tombstoned" and "soft-deleted" are all ways of keeping a
+   value while describing it differently.
 3. `erasure-is-total` — erase a person; assert no cell, index, cache, log
    payload or export contains their data.
 4. `dsr-under-2s` — assert the subject access query returns within budget.
