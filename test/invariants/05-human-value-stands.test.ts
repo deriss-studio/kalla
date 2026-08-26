@@ -27,7 +27,7 @@ describe('invariant: a human-authored value stands', () => {
     }
 
     const { cellId } = await writeCellValue(ctx, sourced('Stockholm'))
-    await humanCorrectCell(f.db, cellId, 'Stockholm, Sweden', 'soheill')
+    await humanCorrectCell(f.db, f.workspaceId, cellId, 'Stockholm, Sweden', 'soheill')
 
     const outcome = await writeCellValue(ctx, sourced('Gothenburg'))
 
@@ -57,7 +57,7 @@ describe('invariant: a human-authored value stands', () => {
       .where(eq(authorship.cellId, cellId))
     expect(before!.origin).toBe('machine')
 
-    await humanCorrectCell(f.db, cellId, 'Stockholm, Sweden', 'soheill')
+    await humanCorrectCell(f.db, f.workspaceId, cellId, 'Stockholm, Sweden', 'soheill')
 
     const [after] = await f.db
       .select()
@@ -73,7 +73,7 @@ describe('invariant: a human-authored value stands', () => {
       { db: f.db, workspaceId: f.workspaceId, rowId: f.rowId, columnId: f.columnId },
       sourced('Stockholm'),
     )
-    await humanCorrectCell(f.db, cellId, 'Stockholm, Sweden', 'soheill')
+    await humanCorrectCell(f.db, f.workspaceId, cellId, 'Stockholm, Sweden', 'soheill')
 
     const message = await rejectionMessage(() =>
       f.db.execute(sql`UPDATE cell SET value = 'Gothenburg' WHERE id = ${cellId}::uuid`),

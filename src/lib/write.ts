@@ -68,7 +68,7 @@ export async function writeCellValue(
 ): Promise<WriteOutcome> {
   const { db, workspaceId, rowId, columnId } = ctx
 
-  const meta = await loadCellMeta(db, rowId, columnId)
+  const meta = await loadCellMeta(db, workspaceId, rowId, columnId)
 
   // --- refuse before anything is persisted ---------------------------------
   const special = checkSpecialCategory(
@@ -180,15 +180,21 @@ export async function writeCellValue(
 /**
  * A person corrects a cell. Their value stands until they change it, and the
  * authorship record says so.
+ *
+ * Takes the workspace for the same reason the agent path does: a write is only
+ * permitted against a cell this workspace actually holds.
  */
 export async function humanCorrectCell(
   db: Db,
+  workspaceId: string,
   cellId: string,
   value: string,
   actorRef: string,
   evidenceUrl?: string,
 ): Promise<void> {
   await db.transaction(async (tx) => {
+    await assertCellInWorkspace(tx as unknown as Db, workspaceId, cellId)
+
     await tx.execute(sql`SELECT set_config('app.human_edit', 'on', true)`)
 
     await tx
@@ -219,7 +225,27 @@ export async function humanCorrectCell(
 
 /* ------------------------------------------------------------- internals */
 
-async function loadCellMeta(db: Db, rowId: string, columnId: string) {
+/**
+ * Load the column and row a write is aimed at, and prove they belong together
+ * and to the caller's workspace.
+ *
+ * Both halves matter. The row and the column must sit in the same sheet, and
+ * that sheet must sit in this workspace — check only the second and a caller
+ * can still pair a column from one tenant with a row from another, because
+ * the column alone satisfies the workspace test.
+ *
+ * The consequence of getting this wrong is not a mis-filed cell. Person
+ * entities are workspace-scoped, so a value written under the wrong workspace
+ * resolves its subject into the wrong tenant: one person's data placed beyond
+ * the reach of their own workspace's access and erasure queries, by a caller
+ * that merely passed the wrong argument.
+ */
+async function loadCellMeta(
+  db: Db,
+  workspaceId: string,
+  rowId: string,
+  columnId: string,
+) {
   const [meta] = await db
     .select({
       columnName: column.name,
@@ -230,12 +256,44 @@ async function loadCellMeta(db: Db, rowId: string, columnId: string) {
     })
     .from(column)
     .innerJoin(sheet, eq(sheet.id, column.sheetId))
-    .innerJoin(rowEntity, eq(rowEntity.id, rowId))
-    .where(eq(column.id, columnId))
+    .innerJoin(
+      rowEntity,
+      and(eq(rowEntity.id, rowId), eq(rowEntity.sheetId, column.sheetId)),
+    )
+    .where(and(eq(column.id, columnId), eq(sheet.workspaceId, workspaceId)))
     .limit(1)
 
-  if (!meta) throw new Error(`unknown column ${columnId} or row ${rowId}`)
+  if (!meta) {
+    throw new Error(
+      `refusing to write row ${rowId} / column ${columnId} in workspace ${workspaceId}: ` +
+        'the row and column must belong to the same sheet, and that sheet to this workspace',
+    )
+  }
   return meta
+}
+
+/**
+ * The same guard, for a path that names a cell directly rather than a row and
+ * a column. A cell's tenancy is derived, never trusted from the argument.
+ */
+async function assertCellInWorkspace(
+  db: Db,
+  workspaceId: string,
+  cellId: string,
+): Promise<void> {
+  const [owned] = await db
+    .select({ id: cell.id })
+    .from(cell)
+    .innerJoin(column, eq(column.id, cell.columnId))
+    .innerJoin(sheet, eq(sheet.id, column.sheetId))
+    .where(and(eq(cell.id, cellId), eq(sheet.workspaceId, workspaceId)))
+    .limit(1)
+
+  if (!owned) {
+    throw new Error(
+      `refusing to write cell ${cellId} in workspace ${workspaceId}: the cell belongs to another workspace, or does not exist`,
+    )
+  }
 }
 
 async function currentCell(db: Db, rowId: string, columnId: string) {

@@ -41,7 +41,7 @@ describe('invariant: no value without provenance', () => {
       { db: f.db, workspaceId: f.workspaceId, rowId: f.rowId, columnId: f.columnId },
       sourced('Stockholm, Sweden'),
     )
-    await humanCorrectCell(f.db, cellId, 'Stockholm, SE', 'soheill')
+    await humanCorrectCell(f.db, f.workspaceId, cellId, 'Stockholm, SE', 'soheill')
 
     const rows = await f.db
       .select()
