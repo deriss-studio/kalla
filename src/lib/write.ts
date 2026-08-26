@@ -19,7 +19,7 @@ import {
   workspace,
 } from '../db/schema.js'
 import { checkSpecialCategory } from './special.js'
-import { detectPersonalData, resolvePerson } from './person.js'
+import { resolveSubject } from './person.js'
 import { domainOf } from './collection.js'
 
 /** What a cell agent returns. See the cell agent contract in the strategy doc. */
@@ -107,20 +107,21 @@ export async function writeCellValue(
   }
 
   // --- personal data becomes an entity -------------------------------------
-  const personal = detectPersonalData({
-    value: result.value,
-    columnName: meta.columnName,
-    columnDataClass: meta.dataClass,
-    rowKind: meta.rowKind,
-  })
-
   const retentionDays = meta.retentionDays ?? meta.workspaceRetentionDays
   const firstWriteExpiry = new Date(Date.now() + retentionDays * 86_400_000)
 
   return db.transaction(async (tx) => {
-    const subjectId = personal.personal
-      ? await resolvePerson(tx as unknown as Db, workspaceId, personal, firstWriteExpiry)
-      : null
+    const subjectId = await resolveSubject(
+      tx as unknown as Db,
+      workspaceId,
+      {
+        value: result.value,
+        columnName: meta.columnName,
+        columnDataClass: meta.dataClass,
+        rowKind: meta.rowKind,
+      },
+      firstWriteExpiry,
+    )
 
     let cellId: string
     if (existing) {
@@ -194,38 +195,174 @@ export async function humanCorrectCell(
   actorRef: string,
   evidenceUrl?: string,
 ): Promise<void> {
-  await db.transaction(async (tx) => {
-    await assertCellInWorkspace(tx as unknown as Db, workspaceId, cellId)
+  await db.transaction(async (tx) =>
+    applyHumanValue(tx as unknown as Db, workspaceId, cellId, value, actorRef, [
+      { url: evidenceUrl ?? `human:${actorRef}` },
+    ]),
+  )
+}
 
-    await tx.execute(sql`SELECT set_config('app.human_edit', 'on', true)`)
-
-    await tx
-      .update(cell)
-      .set({ value, state: 'filled', updatedAt: new Date() })
-      .where(eq(cell.id, cellId))
-
-    await tx.insert(provenance).values({
-      cellId,
-      sourceUrl: evidenceUrl ?? `human:${actorRef}`,
-      sourceDomain: evidenceUrl ? domainOf(evidenceUrl) : 'human',
-      retrievedAt: new Date(),
-      crawlerId: 'human',
-      robotsState: 'n/a',
-      aiTxtState: 'n/a',
-      quote: null,
-    })
-
-    await tx
-      .insert(authorship)
-      .values({ cellId, origin: 'machine_then_human', actorRef })
-      .onConflictDoUpdate({
-        target: authorship.cellId,
-        set: { origin: 'machine_then_human', actorRef, at: new Date() },
+/**
+ * A human accepts an agent's proposal over a cell they had corrected.
+ *
+ * The decision is theirs, so the result is authored `machine_then_human` and
+ * goes down the same path as any other human write — including the person
+ * resolution, which a proposal's value needs exactly as much as an agent's.
+ */
+export async function acceptProposal(
+  db: Db,
+  workspaceId: string,
+  proposalId: string,
+  actorRef: string,
+): Promise<{ cellId: string }> {
+  return db.transaction(async (tx) => {
+    const [p] = await tx
+      .select({
+        id: proposal.id,
+        cellId: proposal.cellId,
+        value: proposal.value,
+        evidence: proposal.evidence,
+        state: proposal.state,
       })
+      .from(proposal)
+      .where(eq(proposal.id, proposalId))
+      .limit(1)
+
+    if (!p) throw new Error(`unknown proposal ${proposalId}`)
+    if (p.state !== 'open') {
+      throw new Error(`proposal ${proposalId} is already ${p.state}`)
+    }
+
+    await applyHumanValue(
+      tx as unknown as Db,
+      workspaceId,
+      p.cellId,
+      p.value,
+      actorRef,
+      // The URLs the agent found; the judgement is the person's.
+      (p.evidence ?? []).map((e) => ({ url: e.url, quote: e.quote })),
+    )
+
+    await tx
+      .update(proposal)
+      .set({ state: 'accepted', decidedAt: new Date(), decidedBy: actorRef })
+      .where(eq(proposal.id, proposalId))
+
+    return { cellId: p.cellId }
+  })
+}
+
+/**
+ * A row is created. When the row IS a person — a candidate, a student, a
+ * borrower — the label is personal data and resolves to an entity, exactly as
+ * a cell value would.
+ */
+export async function createRow(
+  db: Db,
+  workspaceId: string,
+  sheetId: string,
+  input: { label: string; kind?: string; position?: number },
+): Promise<{ rowId: string; subjectId: string | null }> {
+  return db.transaction(async (tx) => {
+    const [owner] = await tx
+      .select({ retentionDays: workspace.defaultRetentionDays })
+      .from(sheet)
+      .innerJoin(workspace, eq(workspace.id, sheet.workspaceId))
+      .where(and(eq(sheet.id, sheetId), eq(sheet.workspaceId, workspaceId)))
+      .limit(1)
+
+    if (!owner) {
+      throw new Error(
+        `refusing to create a row in sheet ${sheetId}: it does not belong to workspace ${workspaceId}`,
+      )
+    }
+
+    const kind = input.kind ?? 'organisation'
+    const subjectId = await resolveSubject(
+      tx as unknown as Db,
+      workspaceId,
+      { value: input.label, rowKind: kind },
+      new Date(Date.now() + owner.retentionDays * 86_400_000),
+    )
+
+    const [row] = await tx
+      .insert(rowEntity)
+      .values({
+        sheetId,
+        label: input.label,
+        kind,
+        subjectId,
+        position: input.position ?? 0,
+      })
+      .returning({ id: rowEntity.id })
+
+    return { rowId: row!.id, subjectId }
   })
 }
 
 /* ------------------------------------------------------------- internals */
+
+/**
+ * Everything a human write does, once. Both the correction path and the
+ * proposal-acceptance path go through here, so neither can drift away from
+ * resolving personal data to an entity.
+ */
+async function applyHumanValue(
+  tx: Db,
+  workspaceId: string,
+  cellId: string,
+  value: string,
+  actorRef: string,
+  sources: { url: string; quote?: string }[],
+): Promise<void> {
+  const meta = await loadCellForHumanWrite(tx, workspaceId, cellId)
+
+  await tx.execute(sql`SELECT set_config('app.human_edit', 'on', true)`)
+
+  // The person inherits the cell's existing clock rather than a fresh one: a
+  // correction is not a new collection, and must not renew retention.
+  const subjectId = await resolveSubject(
+    tx,
+    workspaceId,
+    {
+      value,
+      columnName: meta.columnName,
+      columnDataClass: meta.dataClass,
+      rowKind: meta.rowKind,
+    },
+    meta.retentionExpiresAt,
+  )
+
+  await tx
+    .update(cell)
+    .set({ value, state: 'filled', subjectId, updatedAt: new Date() })
+    .where(eq(cell.id, cellId))
+
+  for (const s of sources) {
+    const external = !s.url.startsWith('human:')
+    await tx.insert(provenance).values({
+      cellId,
+      sourceUrl: s.url,
+      sourceDomain: external ? domainOf(s.url) : 'human',
+      retrievedAt: new Date(),
+      crawlerId: 'human',
+      // A human write is a decision, not a fetch. Where the URL came from a
+      // proposal, the collection state of that fetch was never carried on the
+      // proposal, so it cannot be asserted here.
+      robotsState: 'n/a',
+      aiTxtState: 'n/a',
+      quote: s.quote ?? null,
+    })
+  }
+
+  await tx
+    .insert(authorship)
+    .values({ cellId, origin: 'machine_then_human', actorRef })
+    .onConflictDoUpdate({
+      target: authorship.cellId,
+      set: { origin: 'machine_then_human', actorRef, at: new Date() },
+    })
+}
 
 /**
  * Load the column and row a write is aimed at, and prove they belong together
@@ -282,17 +419,24 @@ async function loadCellMeta(
 
 /**
  * The same guard, for a path that names a cell directly rather than a row and
- * a column. A cell's tenancy is derived, never trusted from the argument.
+ * a column, returning what a human write needs to resolve its value. A cell's
+ * tenancy is derived, never trusted from the argument.
  */
-async function assertCellInWorkspace(
+async function loadCellForHumanWrite(
   db: Db,
   workspaceId: string,
   cellId: string,
-): Promise<void> {
+) {
   const [owned] = await db
-    .select({ id: cell.id })
+    .select({
+      columnName: column.name,
+      dataClass: column.dataClass,
+      rowKind: rowEntity.kind,
+      retentionExpiresAt: cell.retentionExpiresAt,
+    })
     .from(cell)
     .innerJoin(column, eq(column.id, cell.columnId))
+    .innerJoin(rowEntity, eq(rowEntity.id, cell.rowId))
     .innerJoin(sheet, eq(sheet.id, column.sheetId))
     .where(and(eq(cell.id, cellId), eq(sheet.workspaceId, workspaceId)))
     .limit(1)
@@ -302,6 +446,7 @@ async function assertCellInWorkspace(
       `refusing to write cell ${cellId} in workspace ${workspaceId}: the cell belongs to another workspace, or does not exist`,
     )
   }
+  return owned
 }
 
 async function currentCell(db: Db, rowId: string, columnId: string) {

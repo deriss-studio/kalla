@@ -181,10 +181,20 @@ export const rowEntity = pgTable(
       .references(() => sheet.id, { onDelete: 'cascade' }),
     kind: text('kind').notNull().default('organisation'),
     label: text('label').notNull(),
+    /**
+     * Non-null whenever this row IS an identifiable individual — a candidate,
+     * a student, a borrower. Without it the label was personal data with no
+     * entity behind it, and erasure could not reach it. Commitment 2 applies
+     * to rows exactly as it applies to cells.
+     */
+    subjectId: uuid('subject_id').references(() => person.id, {
+      onDelete: 'set null',
+    }),
     position: integer('position').notNull().default(0),
   },
   (t) => [
     index('row_sheet_idx').on(t.sheetId),
+    index('row_subject_idx').on(t.subjectId),
     /** Referenced by cell's composite foreign key. See the cell table. */
     uniqueIndex('row_id_sheet_idx').on(t.id, t.sheetId),
   ],

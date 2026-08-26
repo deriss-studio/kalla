@@ -156,11 +156,13 @@ export const VALUE_BEARING: ColumnClass[] = [
   {
     table: 'row_entity',
     column: 'label',
-    classification: 'unreachable',
+    classification: 'subject',
+    redactTo: 'redacted:erasure',
     note:
-      'a row whose kind is "person" IS an individual, but row_entity has no ' +
-      'subject_id, so erasure cannot reach it. Closing this needs the same ' +
-      'treatment cells got: resolve person-kind rows to a person entity.',
+      'a row whose kind is "person" IS an individual. It was unreachable until ' +
+      'row_entity gained subject_id, and it was unreachable exactly where the ' +
+      'regime is strictest: the sheets whose rows are people are the Annex III ' +
+      'high-risk uses, employment_screening and education_access.',
   },
   { table: 'row_entity', column: 'kind', classification: 'structural' },
 
@@ -231,6 +233,7 @@ export const VALUE_BEARING: ColumnClass[] = [
  */
 export const SUBJECT_REACH: Record<string, 'by_subject_id' | 'by_cell_id'> = {
   cell: 'by_subject_id',
+  row_entity: 'by_subject_id',
   dsr: 'by_subject_id',
   provenance: 'by_cell_id',
   proposal: 'by_cell_id',

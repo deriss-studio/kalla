@@ -13,7 +13,7 @@
 
 import { and, eq, sql } from 'drizzle-orm'
 import type { Db } from '../db/client.js'
-import { cell, person } from '../db/schema.js'
+import { cell, person, rowEntity } from '../db/schema.js'
 import { SUBJECT_REACH, redactableColumns } from '../db/value-bearing.js'
 
 export type PersonalDataCheck =
@@ -62,6 +62,33 @@ export function detectPersonalData(input: {
   const canonicalKey = (email ?? profile ?? name ?? value).trim().toLowerCase()
 
   return { personal: true, canonicalKey, displayName: name ?? null }
+}
+
+/**
+ * The one place a value becomes a person.
+ *
+ * Every write path that can introduce an individual goes through here: agent
+ * writes, human corrections, accepted proposals and row creation. It used to
+ * live inside writeCellValue, which meant a name typed by a human stayed a
+ * string — commitment 2 held for the agent and quietly failed for everyone
+ * else.
+ *
+ * Returns the person's id, or null when the value is not about an individual.
+ */
+export async function resolveSubject(
+  db: Db,
+  workspaceId: string,
+  input: {
+    value: string | null
+    columnName?: string
+    columnDataClass?: string
+    rowKind?: string
+  },
+  retentionExpiresAt: Date | null,
+): Promise<string | null> {
+  const check = detectPersonalData(input)
+  if (!check.personal) return null
+  return resolvePerson(db, workspaceId, check, retentionExpiresAt)
 }
 
 export async function resolvePerson(
@@ -150,6 +177,13 @@ export async function erasePerson(db: Db, personId: string): Promise<void> {
         .set({ state: 'expired', subjectId: null, updatedAt: new Date() })
         .where(eq(cell.subjectId, personId))
     }
+
+    // Rows that were this person. Their label is redacted by the loop above;
+    // the reference goes here, after it, or the loop would not have found them.
+    await tx
+      .update(rowEntity)
+      .set({ subjectId: null })
+      .where(eq(rowEntity.subjectId, personId))
 
     await tx
       .update(person)

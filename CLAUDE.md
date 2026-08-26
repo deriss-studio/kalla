@@ -142,8 +142,14 @@ asserts the database still refuses. Keep that pattern when you add one.
    is persisted. Person entities are workspace-scoped, so a value written
    under the wrong workspace resolves its subject into the wrong tenant, where
    the owning workspace's access and erasure queries can no longer reach it.
+9. `personal-data-is-an-entity` — introduce the same individual by every write
+   path there is: an agent write, a human correction, an accepted proposal, a
+   person-kind row. Assert each resolves to a person entity, and that all of
+   them resolve to the *same* one.
 
-A pull request that adds a write path without extending test 1 is incomplete.
+A pull request that adds a write path without extending tests 1 and 9 is
+incomplete. Test 1 proves the value has an origin; test 9 proves the person in
+it is an entity rather than a string.
 
 ### Proving a new invariant test
 

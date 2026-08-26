@@ -27,7 +27,7 @@ src/lib/collection.ts   robots.txt / ai.txt gate, and the collection log
 src/lib/special.ts      Article 9 refusal
 src/lib/dsr.ts          "everything we hold about this person", in one query
 src/lib/classify.ts     AI Act risk class, per sheet, by declared use
-test/invariants/        the eight tests that are the specification
+test/invariants/        the nine tests that are the specification
 ```
 
 `AGENTS.md` is a symlink to `CLAUDE.md`, so the two cannot drift. Coding agents

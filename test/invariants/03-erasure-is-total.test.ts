@@ -190,14 +190,14 @@ describe('invariant: erasure is total', () => {
     ).toHaveLength(0)
   })
 
-  it('names the columns erasure cannot reach, and lets the list shrink only', () => {
-    // A gap that is written down can be argued with. One that is not gets
-    // rediscovered by somebody's regulator.
+  it('has no columns erasure cannot reach, and lets the list shrink only', () => {
+    // Empty, and pinned that way. A gap that is written down can be argued
+    // with; one that is not gets rediscovered by somebody's regulator.
     const unreachable = VALUE_BEARING.filter(
       (c) => c.classification === 'unreachable',
     ).map((c) => `${c.table}.${c.column}`)
 
-    expect(unreachable).toEqual(['row_entity.label'])
+    expect(unreachable).toEqual([])
   })
 
   it('leaves a tombstone proving the erasure happened', async () => {
