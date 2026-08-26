@@ -71,9 +71,9 @@ Detection has two failure directions and neither of them is cheap.
   Picking a side to avoid an awkward state is how both failures above get made.
 
 Resolution keys on an identifier, never on raw text. Keying on the raw value
-split "Vera Exempel Testsson" and "Vera Exempel Testsson, CEO" into two people, which is
-the worst failure of the three because it makes an Article 15 answer look
-complete while missing half of what is held.
+split "Vera Exempel Testsson" from "Vera Exempel Testsson, CEO" into two
+people, which is the worst failure of the three because it makes an Article 15
+answer look complete while missing half of what is held.
 
 Detection is a judgement rather than a constraint, so it is held to a measured
 floor in both directions — see `test/identity-corpus.ts` and invariant 9. The

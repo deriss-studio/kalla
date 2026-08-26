@@ -1,14 +1,16 @@
 /**
  * Commitment 2: personal data is an entity, never a string.
  *
- * Two responsibilities live here.
+ * Three responsibilities live here.
  *
- *   detectPersonalData — is this value about an identifiable individual?
- *                        When uncertain, say yes. Over-flagging is cheap;
- *                        under-flagging is the failure mode that ends the
- *                        company.
+ *   assess         — the two questions below: does this cell need
+ *                    personal-data handling, and does anything in it identify
+ *                    a specific human?
+ *   resolveSubject — the one place a value becomes a person, for every write
+ *                    path there is.
+ *   erasePerson    — and the one place they stop being one.
  *
- *   resolvePerson      — the same human across forty sheets is ONE row.
+ * The same human across forty sheets is ONE row here with forty references.
  */
 
 import { and, eq, sql } from 'drizzle-orm'
@@ -47,9 +49,9 @@ export interface Identity {
   kind: IdentityKind
   /**
    * The key resolution uses. Derived from an identifier, never from raw text —
-   * keying on the raw value split "Vera Exempel Testsson" and "Vera Exempel Testsson, CEO"
-   * into two people, which makes an Article 15 answer look complete while
-   * missing half of what is held.
+   * keying on the raw value split "Vera Exempel Testsson" from "Vera Exempel
+   * Testsson, CEO" into two people, which makes an Article 15 answer look
+   * complete while missing half of what is held.
    */
   key: string
   displayName: string | null

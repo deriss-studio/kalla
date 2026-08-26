@@ -152,19 +152,19 @@ describe('a cell can be argued with', () => {
     await resolveContest(f.db, f.workspaceId, contestId, {
       resolution: 'corrected',
       resolvedByHuman: 'soheill',
-      value: 'Sara Lindqvist',
+      value: 'Nora Testberg',
       note: 'Confirmed with the company.',
     })
 
     const row = await stateOf(f, cellId)
-    expect(row.value).toBe('Sara Lindqvist')
+    expect(row.value).toBe('Nora Testberg')
     expect(row.subjectId, 'the corrected name stayed a string').toBeTruthy()
     expect(row.subjectId).not.toBe(subjectId)
 
     const all = await f.db.select().from(person)
     expect(all.map((p) => p.displayName).sort()).toEqual([
+      'Nora Testberg',
       'Vera Exempel Testsson',
-      'Sara Lindqvist',
     ])
   })
 

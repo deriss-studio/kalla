@@ -63,7 +63,7 @@ export const IDENTIFYING: Case[] = [
     why: 'an email identifies on its own, whatever the column expects',
   },
   {
-    value: 'Contact: sara.lindqvist@example.co.uk',
+    value: 'Contact: nora.testberg@example.co.uk',
     context: HQ,
     why: 'an email embedded in a sentence',
   },
@@ -83,12 +83,12 @@ export const IDENTIFYING: Case[] = [
     why: 'a phone number where a phone number is expected',
   },
   {
-    value: 'Sara Lindqvist',
+    value: 'Nora Testberg',
     context: CANDIDATE,
     why: 'a person-kind row is a claim about its label',
   },
   {
-    value: 'Anna-Karin Öberg',
+    value: 'Anna-Karin Övningsson',
     context: FOUNDER,
     why: 'Nordic characters and a hyphen are ordinary, not exotic',
   },
