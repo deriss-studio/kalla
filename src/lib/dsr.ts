@@ -81,6 +81,7 @@ export async function subjectAccessPack(
     .select({
       id: person.id,
       displayName: person.displayName,
+      canonicalKey: person.canonicalKey,
       lawfulBasis: person.lawfulBasis,
       firstSeenAt: person.firstSeenAt,
       retentionExpiresAt: person.retentionExpiresAt,
@@ -163,9 +164,11 @@ export async function subjectAccessPack(
         .where(inArray(contest.cellId, cellIds))
     : []
 
-  const retained = await retainedHoldings(db, [
-    ...new Set([...rows.map((r) => r.sheetId), ...subjectRows.map((r) => r.sheetId)]),
-  ])
+  const retained = await retainedHoldings(
+    db,
+    [...new Set([...rows.map((r) => r.sheetId), ...subjectRows.map((r) => r.sheetId)])],
+    subjectNeedles(subject.displayName, subject.canonicalKey),
+  )
 
   return {
     subject,
@@ -205,15 +208,29 @@ export async function subjectAccessPack(
 }
 
 /**
- * Everything the registry marks `retained`, for the sheets this person appears
- * in, with the ground it is kept on. Driven entirely by the declaration: a
- * column reclassified as retained shows up here without this code changing.
+ * Everything the registry marks `retained` that actually mentions this person,
+ * with the ground it is kept on.
+ *
+ * Scoped to the subject, not to the workspace. A prompt reading "Anything else
+ * of interest?" is retained and survives an erasure, but it holds nothing about
+ * anyone; listing it in a subject's own access response is noise, and noise in
+ * this section is worse than in most, because the section's whole job is to
+ * tell someone what will outlive their erasure request.
+ *
+ * The purposes of the processing are disclosed regardless, on each holding as
+ * `sheetPurpose` — Article 15(1)(a) asks for those whether or not they name the
+ * person. This section answers the different question of what text about THEM
+ * we intend to keep.
+ *
+ * Driven by the declaration either way: a column reclassified as retained shows
+ * up here without this code changing.
  */
 async function retainedHoldings(
   db: Db,
   sheetIds: string[],
+  needles: string[],
 ): Promise<SubjectAccessPack['retained']> {
-  if (sheetIds.length === 0) return []
+  if (sheetIds.length === 0 || needles.length === 0) return []
 
   const out: SubjectAccessPack['retained'] = []
 
@@ -241,6 +258,12 @@ async function retainedHoldings(
            sql`, `,
          )})
            AND t.${sql.identifier(c.column)} IS NOT NULL
+           AND (${sql.join(
+             needles.map(
+               (n) => sql`t.${sql.identifier(c.column)}::text ILIKE ${'%' + n + '%'}`,
+             ),
+             sql` OR `,
+           )})
       `)
 
       for (const r of found.rows) {
@@ -256,6 +279,21 @@ async function retainedHoldings(
   }
 
   return out
+}
+
+/**
+ * The strings that stand for this person in free text.
+ *
+ * Their display name, and the identifier their entity is keyed on with the
+ * kind prefix removed — an email or a profile handle reads in a sentence just
+ * as a name does.
+ */
+function subjectNeedles(
+  displayName: string | null,
+  canonicalKey: string,
+): string[] {
+  const identifier = canonicalKey.replace(/^(email|profile|phone|name):/, '')
+  return [...new Set([displayName, identifier].filter((n): n is string => !!n?.trim()))]
 }
 
 export async function recordRequest(

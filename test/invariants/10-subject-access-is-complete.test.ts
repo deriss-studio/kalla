@@ -23,7 +23,7 @@ import {
   writeCellValue,
 } from '../../src/lib/write.js'
 import { subjectAccessPack } from '../../src/lib/dsr.js'
-import { contest, sheet } from '../../src/db/schema.js'
+import { column, contest, person, sheet } from '../../src/db/schema.js'
 import { RETAINED_REACH, VALUE_BEARING } from '../../src/db/value-bearing.js'
 
 let f: Fixture
@@ -104,10 +104,78 @@ describe('the subject access pack', () => {
     expect(purpose!.value).toContain(SUBJECT)
     expect(purpose!.ground).toMatch(/Art\. 17\(3\)/)
 
-    // The prompt that produced the value is retained too, and disclosed.
+    // And only what mentions them. A prompt is retained and survives an
+    // erasure, but "Where is the company headquartered?" holds nothing about
+    // this person; listing it here would bury the line that does.
     expect(
-      pack.retained.some((r) => r.table === 'column' && r.column === 'prompt'),
-    ).toBe(true)
+      pack.retained.map((r) => `${r.table}.${r.column}`),
+      'a retained field that does not mention the subject was disclosed',
+    ).toEqual(['sheet.purpose'])
+  })
+
+  it('discloses a retained field that names them, wherever it lives', async () => {
+    // The rule is about the content, not the table. A prompt that names
+    // someone is as disclosable as a purpose that does.
+    f = await fixture({ columnName: 'Founder', dataClass: 'personal' })
+
+    await f.db
+      .update(column)
+      .set({ prompt: `Confirm whether ${SUBJECT} still holds the role.` })
+      .where(eq(column.id, f.columnId))
+
+    const { subjectId } = await writeCellValue(
+      { db: f.db, workspaceId: f.workspaceId, rowId: f.rowId, columnId: f.columnId },
+      sourced(SUBJECT),
+    )
+
+    const pack = await subjectAccessPack(f.db, subjectId!)
+    const prompt = pack.retained.find((r) => r.column === 'prompt')
+
+    expect(prompt, 'a retained prompt naming the subject was not disclosed').toBeTruthy()
+    expect(prompt!.value).toContain(SUBJECT)
+    expect(prompt!.ground).toMatch(/Art\. 17\(3\)/)
+  })
+
+  it('discloses a retained field naming someone who has no name', async () => {
+    // A person resolved by email carries no display name at all. If the only
+    // needle were the name, they would silently receive an empty retained
+    // section — the failure mode the whole section exists to prevent.
+    f = await fixture({ columnName: 'Contact', dataClass: 'personal' })
+
+    await f.db
+      .update(sheet)
+      .set({ purpose: 'Follow up with vera@example.test about the mandate.' })
+      .where(eq(sheet.id, f.sheetId))
+
+    const { subjectId } = await writeCellValue(
+      { db: f.db, workspaceId: f.workspaceId, rowId: f.rowId, columnId: f.columnId },
+      sourced('vera@example.test'),
+    )
+
+    const [subject] = await f.db.select().from(person).where(eq(person.id, subjectId!))
+    expect(subject!.displayName, 'this case needs a person with no name').toBeNull()
+
+    const pack = await subjectAccessPack(f.db, subjectId!)
+    const purpose = pack.retained.find((r) => r.column === 'purpose')
+
+    expect(purpose, 'a person with no display name was disclosed nothing').toBeTruthy()
+    expect(purpose!.value).toContain('vera@example.test')
+  })
+
+  it('discloses the purpose of the processing whether or not it names them', async () => {
+    // Article 15(1)(a) asks for the purposes regardless. They ride on each
+    // holding, so narrowing the retained section does not lose them.
+    f = await fixture({ columnName: 'Founder', dataClass: 'personal' })
+
+    const { subjectId } = await writeCellValue(
+      { db: f.db, workspaceId: f.workspaceId, rowId: f.rowId, columnId: f.columnId },
+      sourced(SUBJECT),
+    )
+
+    const pack = await subjectAccessPack(f.db, subjectId!)
+
+    expect(pack.retained, 'nothing here mentions them').toHaveLength(0)
+    expect(pack.holdings[0]!.sheetPurpose).toBeTruthy()
   })
 
   it('gives every retained table a route to the subject', async () => {
