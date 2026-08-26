@@ -25,6 +25,7 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import type { Db } from '../db/client.js'
 import { cell, contest } from '../db/schema.js'
+import { assertNotBlockedEvidence } from './collection.js'
 import { applyHumanValue, loadCellForWrite } from './write.js'
 
 export type ContestRaiser = 'user' | 'subject' | 'reviewer'
@@ -66,6 +67,14 @@ export async function raiseContest(
   return db.transaction(async (tx) => {
     // Same tenancy guard as any other write against a named cell.
     await loadCellForWrite(tx as unknown as Db, workspaceId, cellId)
+
+    // Counter-evidence is the easiest place to launder a blocked domain in:
+    // nothing fetches it, so nothing checked it.
+    await assertNotBlockedEvidence(
+      tx as unknown as Db,
+      workspaceId,
+      (claim.counterEvidence ?? []).map((e) => e.url),
+    )
 
     const [current] = await tx
       .select({ value: cell.value })

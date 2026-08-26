@@ -20,20 +20,25 @@ import {
 } from '../db/schema.js'
 import { checkSpecialCategory } from './special.js'
 import { resolveSubject } from './person.js'
-import { domainOf } from './collection.js'
+import {
+  assertNotBlockedEvidence,
+  decisionFor,
+  domainOf,
+  isCollectionReceipt,
+  type CollectionReceipt,
+} from './collection.js'
 
 /** What a cell agent returns. See the cell agent contract in the strategy doc. */
 export interface AgentResult {
   value: string | null
   state: 'filled' | 'not_found' | 'refused' | 'blocked'
-  sources: {
-    url: string
-    retrievedAt: Date
-    quote?: string
-    crawlerId?: string
-    robotsState?: string
-    aiTxtState?: string
-  }[]
+  /**
+   * Every source carries the receipt guardedFetch issued for it. There is no
+   * way to supply a URL with an asserted robots or ai.txt state that no fetch
+   * ever observed — the state comes from the receipt, and the receipt is
+   * checked against the collection log before it is written.
+   */
+  sources: { receipt: CollectionReceipt; quote?: string }[]
   confidence?: number
   modelId?: string
   modelRegion?: string
@@ -100,7 +105,10 @@ export async function writeCellValue(
       .values({
         cellId: existing.id,
         value: result.value,
-        evidence: result.sources.map((s) => ({ url: s.url, quote: s.quote })),
+        evidence: result.sources.map((s) => ({
+          url: s.receipt.url,
+          quote: s.quote,
+        })),
       })
       .returning({ id: proposal.id })
     return { cellId: existing.id, state: existing.state, proposalId: p!.id }
@@ -155,18 +163,20 @@ export async function writeCellValue(
     }
 
     for (const s of result.sources) {
+      const r = await verifiedReceipt(tx as unknown as Db, workspaceId, s.receipt)
       await tx.insert(provenance).values({
         cellId,
-        sourceUrl: s.url,
-        sourceDomain: domainOf(s.url),
-        retrievedAt: s.retrievedAt,
-        crawlerId: s.crawlerId ?? 'kalla/0.1',
-        robotsState: s.robotsState ?? 'allowed',
-        aiTxtState: s.aiTxtState ?? 'absent',
+        sourceUrl: r.url,
+        sourceDomain: r.domain,
+        retrievedAt: r.retrievedAt,
+        crawlerId: r.crawlerId,
+        robotsState: r.robotsState,
+        aiTxtState: r.aiTxtState,
         modelId: result.modelId ?? null,
         modelRegion: result.modelRegion ?? null,
         confidence: result.confidence ?? null,
         quote: s.quote ?? null,
+        synthetic: r.synthetic,
       })
     }
 
@@ -308,6 +318,38 @@ export async function createRow(
 /* ------------------------------------------------------------- internals */
 
 /**
+ * A source may only assert a collection state it actually obtained.
+ *
+ * Two checks, because either alone is weak. The receipt must be one this
+ * system minted — a hand-made object with the right shape is not a receipt —
+ * and, unless it is openly synthetic, the domain must carry an `allowed`
+ * decision in the collection log. The second is what makes the assertion
+ * evidenced rather than merely typed: guardedFetch writes that decision, so a
+ * receipt without one describes a fetch that never went through the gate.
+ */
+async function verifiedReceipt(
+  db: Db,
+  workspaceId: string,
+  receipt: CollectionReceipt,
+): Promise<CollectionReceipt> {
+  if (!isCollectionReceipt(receipt)) {
+    throw new Error(
+      'invariant violated: a source without a collection receipt cannot assert a robots or ai.txt state. Fetch it through guardedFetch, or mark it synthetic.',
+    )
+  }
+
+  if (receipt.synthetic) return receipt
+
+  const known = await decisionFor(db, workspaceId, receipt.domain)
+  if (known?.decision !== 'allowed') {
+    throw new Error(
+      `invariant violated: ${receipt.domain} has no recorded collection decision, so its receipt describes a fetch that bypassed the gate`,
+    )
+  }
+  return receipt
+}
+
+/**
  * Everything a human write does, once. The correction path, the
  * proposal-acceptance path and contest resolution all go through here, so none
  * of them can drift away from resolving personal data to an entity.
@@ -324,6 +366,15 @@ export async function applyHumanValue(
   sources: { url: string; quote?: string }[],
 ): Promise<void> {
   const meta = await loadCellForWrite(tx, workspaceId, cellId)
+
+  // A pasted link is not a fetch, but the objection still stands. A domain
+  // that told us not to collect from it does not become admissible because a
+  // person typed the URL instead of a crawler following it.
+  await assertNotBlockedEvidence(
+    tx,
+    workspaceId,
+    sources.map((s) => s.url),
+  )
 
   await tx.execute(sql`SELECT set_config('app.human_edit', 'on', true)`)
 

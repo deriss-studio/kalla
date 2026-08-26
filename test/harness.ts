@@ -28,6 +28,7 @@ import { fileURLToPath } from 'node:url'
 import { createDb, schema, type Db } from '../src/db/client.js'
 import { classifySheet, type DeclaredUse } from '../src/lib/classify.js'
 import { column, rowEntity, sheet, workspace } from '../src/db/schema.js'
+import { syntheticReceipt } from '../src/lib/collection.js'
 import type { AgentResult } from '../src/lib/write.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -217,7 +218,7 @@ export function sourced(value: string, url = 'https://testbolaget.example/about'
   return {
     value,
     state: 'filled',
-    sources: [{ url, retrievedAt: new Date(), quote: `…${value}…` }],
+    sources: [{ receipt: syntheticReceipt(url), quote: `…${value}…` }],
     confidence: 0.9,
     modelId: 'test-model',
     modelRegion: 'eu-west-1',

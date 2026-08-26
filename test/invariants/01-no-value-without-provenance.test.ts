@@ -32,7 +32,9 @@ describe('invariant: no value without provenance', () => {
     expect(rows[0]!.sourceUrl).toBe('https://testbolaget.example/about')
     expect(rows[0]!.sourceDomain).toBe('testbolaget.example')
     expect(rows[0]!.modelRegion).toBe('eu-west-1')
-    expect(rows[0]!.synthetic).toBe(false)
+    // The fixture's source never went through the gate, and says so. CLAUDE.md
+    // permits synthetic provenance provided it is marked; this is the mark.
+    expect(rows[0]!.synthetic).toBe(true)
   })
 
   it('the human correction path produces provenance', async () => {

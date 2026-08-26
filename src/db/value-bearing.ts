@@ -207,6 +207,8 @@ export const VALUE_BEARING: ColumnClass[] = [
   /* ------------------------------------------------------ collection log */
   { table: 'collection_log', column: 'domain', classification: 'structural' },
   { table: 'collection_log', column: 'reason', classification: 'structural' },
+  { table: 'collection_log', column: 'robots_state', classification: 'structural' },
+  { table: 'collection_log', column: 'ai_txt_state', classification: 'structural' },
 
   /* ----------------------------------------------------------------- lia */
   /**

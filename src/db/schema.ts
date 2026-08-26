@@ -433,6 +433,13 @@ export const collectionLog = pgTable(
     domain: text('domain').notNull(),
     decision: collectionDecision('decision').notNull(),
     reason: text('reason').notNull(),
+    /**
+     * What was actually observed at the domain, so a later write can carry the
+     * state rather than assert one. Null means the decision predates state
+     * recording, which forces a fresh check instead of a guess.
+     */
+    robotsState: text('robots_state'),
+    aiTxtState: text('ai_txt_state'),
     decidedAt: timestamp('decided_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

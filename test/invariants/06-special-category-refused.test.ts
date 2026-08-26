@@ -16,6 +16,7 @@ import { fixture, type Fixture } from '../harness.js'
 import { writeCellValue, type AgentResult } from '../../src/lib/write.js'
 import { cell } from '../../src/db/schema.js'
 import { checkSpecialCategory } from '../../src/lib/special.js'
+import { syntheticReceipt } from '../../src/lib/collection.js'
 
 let f: Fixture
 
@@ -60,7 +61,7 @@ describe('invariant: special categories are refused', () => {
       const result: AgentResult = {
         value: c.value,
         state: 'filled',
-        sources: [{ url: 'https://example.com/profile', retrievedAt: new Date() }],
+        sources: [{ receipt: syntheticReceipt('https://example.com/profile') }],
       }
 
       const outcome = await writeCellValue(
@@ -92,8 +93,7 @@ describe('invariant: special categories are refused', () => {
         state: 'filled',
         sources: [
           {
-            url: 'https://example.com/profile',
-            retrievedAt: new Date(),
+            receipt: syntheticReceipt('https://example.com/profile'),
             quote: 'Union member since 2019',
           },
         ],
