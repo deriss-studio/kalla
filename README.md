@@ -28,7 +28,7 @@ src/lib/special.ts      Article 9 refusal
 src/lib/contest.ts      arguing with a value; resolution with a name on it
 src/lib/dsr.ts          "everything we hold about this person", in one query
 src/lib/classify.ts     AI Act risk class, per sheet, by declared use
-test/invariants/        the nine tests that are the specification
+test/invariants/        the eleven tests that are the specification
 ```
 
 `AGENTS.md` is a symlink to `CLAUDE.md`, so the two cannot drift. Coding agents

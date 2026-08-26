@@ -174,9 +174,36 @@ asserts the database still refuses. Keep that pattern when you add one.
    person-kind row. Assert each resolves to a person entity, and that all of
    them resolve to the *same* one.
 
+10. `subject-access-is-complete` — assert the pack carries every kind of
+    holding: cells with sources, rows that ARE the person, proposals over them,
+    contests against them, and everything classified `retained`, with the
+    ground it is kept on. Speed is invariant 4's job; this one is scope.
+11. `a-cell-can-be-argued-with` — raise a contest, assert the value is not
+    replaced by it, and resolve it three ways. Assert no resolution is possible
+    without a named human, and that a cell with another argument still running
+    stays contested.
+
 A pull request that adds a write path without extending tests 1 and 9 is
 incomplete. Test 1 proves the value has an origin; test 9 proves the person in
 it is an entity rather than a string.
+
+### What earns a number
+
+A test earns a number when its failure breaks a commitment, not when a feature
+regresses. The distinction is not seniority — an invariant is not a test we
+happen to care about more. It is that the four commitments are the reason this
+system is worth building instead of buying, so a failure that leaves one of
+them untrue is a failure that makes the product pointless rather than worse.
+
+Applied: tenancy became invariant 8 because a value written under the wrong
+workspace puts a person beyond the reach of their own access and erasure
+queries — commitment 2, silently untrue. Contest became invariant 11 because a
+contest that resolves without a name is not a weaker contest, it is commitment
+4 not holding. A regression in how fast the grid paints is a bug; it belongs
+in an ordinary test.
+
+Ordinary tests are not lesser and there should be many more of them. They just
+answer a different question.
 
 ### Proving a new invariant test
 

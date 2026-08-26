@@ -1,29 +1,30 @@
 /**
- * What a subject access response actually contains.
+ * INVARIANT 10 — A subject access response is complete.
  *
- * Invariant 4 holds the pack to a time budget. This holds it to a scope: a
- * response that returns in 280ms and omits half of what we hold is worse than
- * a slow one, because it is wrong in a direction nobody notices.
+ * Invariant 4 holds the pack to a time budget. This holds it to a scope, which
+ * is the harder of the two: a response that returns in 280ms and omits half of
+ * what we hold is worse than a slow one, because it is wrong in a direction
+ * nobody notices. Article 15 is answered by what comes back, not by how fast.
  *
- * An ordinary test rather than an invariant, on the same reasoning as the
- * tenancy guard before it was promoted: whether Article 15 completeness
- * belongs in the numbered list is a decision about the specification. It has a
- * fair claim — "everything we hold about this person" is commitment 2's own
- * wording, and the retained classification is only defensible if the subject
- * is told what survived.
+ * It earns a number because its failure breaks commitment 3. If the pack has
+ * to be assembled by hand rather than derived, the substrate is incomplete —
+ * and a holding that erasure knows about but disclosure does not is the exact
+ * shape of that incompleteness. The `retained` classification depends on this
+ * test existing: keeping data through an erasure is only defensible while the
+ * subject is told what was kept and on what ground.
  */
 
 import { describe, it, expect } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { fixture, sourced, type Fixture } from './harness.js'
+import { fixture, sourced, type Fixture } from '../harness.js'
 import {
   createRow,
   humanCorrectCell,
   writeCellValue,
-} from '../src/lib/write.js'
-import { subjectAccessPack } from '../src/lib/dsr.js'
-import { contest, sheet } from '../src/db/schema.js'
-import { RETAINED_REACH, VALUE_BEARING } from '../src/db/value-bearing.js'
+} from '../../src/lib/write.js'
+import { subjectAccessPack } from '../../src/lib/dsr.js'
+import { contest, sheet } from '../../src/db/schema.js'
+import { RETAINED_REACH, VALUE_BEARING } from '../../src/db/value-bearing.js'
 
 let f: Fixture
 

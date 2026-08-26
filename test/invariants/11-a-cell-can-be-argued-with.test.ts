@@ -1,30 +1,30 @@
 /**
- * Commitment 4, end to end: every cell can be argued with.
+ * INVARIANT 11 — Every cell can be argued with.
  *
- * Until now the contest table existed and nothing wrote to it. "Every cell can
- * be argued with" was the one claim in the README the code did not support,
- * and `contested` was one of four cell states nothing could reach.
+ * Commitment 4, end to end. Invariant 5 covers its other half — that a human's
+ * value is not silently overwritten — and this covers the rest: a claim is
+ * recorded beside the value rather than replacing it, and resolution is a
+ * human act with a name against it.
  *
- * The shape this proves is the demo: a value is filled, someone disagrees, the
- * disagreement sits beside the value rather than replacing it, and a named
- * human decides. Including the case that matters most and is easiest to get
- * wrong — the data subject arguing with a value about themselves.
- *
- * An ordinary test rather than an invariant, though commitment 4 has as strong
- * a claim on the numbered list as any: invariant 5 already covers its other
- * half, that a human's value is not silently overwritten.
+ * It earns a number because its failure breaks a commitment rather than a
+ * feature. A contest that can be resolved without a name, closed on a timeout,
+ * or dropped when the value moves is not a degraded feature; it is the
+ * difference between a system a data subject can argue with and one they
+ * cannot. For most of this repository's life the contest table existed and
+ * nothing wrote to it, which made "every cell can be argued with" the one
+ * claim in the README the code did not support.
  */
 
 import { describe, it, expect } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { fixture, sourced, type Fixture } from './harness.js'
-import { writeCellValue } from '../src/lib/write.js'
+import { fixture, sourced, type Fixture } from '../harness.js'
+import { writeCellValue } from '../../src/lib/write.js'
 import {
   contestsFor,
   raiseContest,
   resolveContest,
-} from '../src/lib/contest.js'
-import { authorship, cell, person } from '../src/db/schema.js'
+} from '../../src/lib/contest.js'
+import { authorship, cell, person } from '../../src/db/schema.js'
 
 let f: Fixture
 
