@@ -58,6 +58,8 @@ export interface WriteOutcome {
   proposalId?: string
   refusedCategory?: string
   subjectId?: string
+  /** Set when detection could settle neither way and a human should look. */
+  uncertainty?: UncertaintyReason
 }
 
 /**
@@ -188,7 +190,12 @@ export async function writeCellValue(
         set: { origin: 'machine', at: new Date() },
       })
 
-    return { cellId, state: 'filled', subjectId: subjectId ?? undefined }
+    return {
+      cellId,
+      state: 'filled',
+      subjectId: subjectId ?? undefined,
+      uncertainty: uncertainty ?? undefined,
+    }
   })
 }
 

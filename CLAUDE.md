@@ -187,6 +187,15 @@ asserts the database still refuses. Keep that pattern when you add one.
     replaced by it, and resolve it three ways. Assert no resolution is possible
     without a named human, and that a cell with another argument still running
     stays contested.
+12. `a-read-never-surfaces-what-was-removed` — erase, refuse and sweep, then
+    read. Assert nothing removed comes back, that a state and a value which
+    disagree resolve in favour of the state, and that a read is scoped to its
+    workspace. Erasure is a promise about what leaves; a read is how things
+    leave.
+13. `risk-class-is-derived` — create a sheet for every declared use; assert the
+    AI Act class is worked out rather than accepted, and that a sheet without a
+    declared purpose is refused. A risk class that arrives as a parameter is
+    the field a hurried person sets to `minimal`.
 
 A pull request that adds a write path without extending tests 1 and 9 is
 incomplete. Test 1 proves the value has an origin; test 9 proves the person in

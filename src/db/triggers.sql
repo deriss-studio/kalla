@@ -1,6 +1,9 @@
 -- ---------------------------------------------------------------------------
 -- The invariants, enforced by the database rather than by discipline.
 --
+-- Every statement here is idempotent, so a persistent database can be reopened
+-- without the triggers being applied twice or, worse, skipped.
+--
 -- Application code can be forgotten, refactored around, or bypassed by a
 -- migration script someone wrote at midnight. These cannot. If you find
 -- yourself wanting to drop one of these to make a feature work, that is the
@@ -39,6 +42,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS cell_requires_provenance ON cell;
 CREATE CONSTRAINT TRIGGER cell_requires_provenance
   AFTER INSERT OR UPDATE ON cell
   DEFERRABLE INITIALLY DEFERRED
@@ -70,6 +74,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS cell_retention_is_sticky ON cell;
 CREATE TRIGGER cell_retention_is_sticky
   BEFORE UPDATE ON cell
   FOR EACH ROW EXECUTE FUNCTION assert_retention_not_renewed();
@@ -92,6 +97,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS provenance_append_only ON provenance;
 CREATE TRIGGER provenance_append_only
   BEFORE UPDATE ON provenance
   FOR EACH ROW EXECUTE FUNCTION assert_provenance_immutable();
@@ -122,6 +128,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS cell_human_value_stands ON cell;
 CREATE TRIGGER cell_human_value_stands
   BEFORE UPDATE ON cell
   FOR EACH ROW EXECUTE FUNCTION assert_human_value_stands();

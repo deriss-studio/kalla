@@ -1,5 +1,6 @@
 import { PGlite } from '@electric-sql/pglite'
 import { drizzle } from 'drizzle-orm/pglite'
+import { migrate } from 'drizzle-orm/pglite/migrator'
 import { readFile, readdir } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -19,6 +20,26 @@ export async function createDb(): Promise<{ db: Db; client: PGlite }> {
   const client = new PGlite()
   const db = drizzle(client, { schema })
   await applySchema(client)
+  return { db, client }
+}
+
+/**
+ * A database that survives the process — what the CLI keeps in .kalla/.
+ *
+ * Migrations run through drizzle's migrator here rather than the raw replay
+ * above, because a persistent database must know which migrations it has
+ * already seen. The SQL is the same files either way; only the bookkeeping
+ * differs. Triggers are re-applied on every open and are written to be
+ * idempotent, so reopening cannot leave a database with tables and without
+ * the invariants that guard them.
+ */
+export async function openDatabase(
+  dataDir: string,
+): Promise<{ db: Db; client: PGlite }> {
+  const client = new PGlite(dataDir)
+  const db = drizzle(client, { schema })
+  await migrate(db, { migrationsFolder: join(here, '../../drizzle') })
+  await client.exec(await readFile(join(here, 'triggers.sql'), 'utf8'))
   return { db, client }
 }
 
