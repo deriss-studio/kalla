@@ -303,11 +303,14 @@ export async function createRow(
 /* ------------------------------------------------------------- internals */
 
 /**
- * Everything a human write does, once. Both the correction path and the
- * proposal-acceptance path go through here, so neither can drift away from
- * resolving personal data to an entity.
+ * Everything a human write does, once. The correction path, the
+ * proposal-acceptance path and contest resolution all go through here, so none
+ * of them can drift away from resolving personal data to an entity.
+ *
+ * Exported for src/lib/contest.ts, which is the third of those. It must be
+ * called inside a transaction — humanCorrectCell is the standalone form.
  */
-async function applyHumanValue(
+export async function applyHumanValue(
   tx: Db,
   workspaceId: string,
   cellId: string,
@@ -315,7 +318,7 @@ async function applyHumanValue(
   actorRef: string,
   sources: { url: string; quote?: string }[],
 ): Promise<void> {
-  const meta = await loadCellForHumanWrite(tx, workspaceId, cellId)
+  const meta = await loadCellForWrite(tx, workspaceId, cellId)
 
   await tx.execute(sql`SELECT set_config('app.human_edit', 'on', true)`)
 
@@ -422,7 +425,7 @@ async function loadCellMeta(
  * a column, returning what a human write needs to resolve its value. A cell's
  * tenancy is derived, never trusted from the argument.
  */
-async function loadCellForHumanWrite(
+export async function loadCellForWrite(
   db: Db,
   workspaceId: string,
   cellId: string,

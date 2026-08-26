@@ -25,6 +25,7 @@ src/lib/write.ts        the single write path
 src/lib/person.ts       personal data as an entity; erasure
 src/lib/collection.ts   robots.txt / ai.txt gate, and the collection log
 src/lib/special.ts      Article 9 refusal
+src/lib/contest.ts      arguing with a value; resolution with a name on it
 src/lib/dsr.ts          "everything we hold about this person", in one query
 src/lib/classify.ts     AI Act risk class, per sheet, by declared use
 test/invariants/        the nine tests that are the specification
