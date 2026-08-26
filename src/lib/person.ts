@@ -13,7 +13,8 @@
 
 import { and, eq, sql } from 'drizzle-orm'
 import type { Db } from '../db/client.js'
-import { cell, person, provenance } from '../db/schema.js'
+import { cell, person } from '../db/schema.js'
+import { SUBJECT_REACH, redactableColumns } from '../db/value-bearing.js'
 
 export type PersonalDataCheck =
   | { personal: false }
@@ -98,36 +99,56 @@ export async function resolvePerson(
 /**
  * Erasure is total, and it is logged.
  *
- * Every reference is cleared, the provenance quotes that could reconstruct the
- * value are redacted, and the person row is tombstoned rather than deleted so
- * that we can prove the erasure happened. The tombstone keeps no identifying
+ * What counts as the subject's data is declared in src/db/value-bearing.ts,
+ * not decided here. This function walks that declaration, so a column added to
+ * the registry is erased without anyone editing this code — and a column added
+ * to the schema and left out of the registry fails invariant 3 rather than
+ * quietly surviving erasure.
+ *
+ * The person row is tombstoned rather than deleted, because the proof that an
+ * erasure happened has to outlive the data. The tombstone keeps no identifying
  * content.
  */
 export async function erasePerson(db: Db, personId: string): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT set_config('app.erasure_in_progress', 'on', true)`)
 
+    // Resolved before anything is cleared: once cell.subject_id is null, the
+    // rows hanging off those cells can no longer be found.
     const cells = await tx
       .select({ id: cell.id })
       .from(cell)
       .where(eq(cell.subjectId, personId))
+    const cellIds = cells.map((c) => c.id)
 
-    for (const c of cells) {
+    for (const [table, columns] of redactableColumns()) {
+      const scope = SUBJECT_REACH[table]
+      if (scope === 'by_cell_id' && cellIds.length === 0) continue
+
+      const where =
+        scope === 'by_subject_id'
+          ? sql`subject_id = ${personId}::uuid`
+          : sql`cell_id IN (${sql.join(
+              cellIds.map((id) => sql`${id}::uuid`),
+              sql`, `,
+            )})`
+
+      const setters = columns.map(
+        (c) => sql`${sql.identifier(c.column)} = ${c.redactTo ?? null}`,
+      )
+
+      await tx.execute(
+        sql`UPDATE ${sql.identifier(table)} SET ${sql.join(setters, sql`, `)} WHERE ${where}`,
+      )
+    }
+
+    // The state change is not a redaction, so it stays here rather than in the
+    // registry: the cell still exists, and says why it is empty.
+    if (cellIds.length > 0) {
       await tx
         .update(cell)
-        .set({
-          value: null,
-          state: 'expired',
-          refusalReason: 'erased_on_request',
-          subjectId: null,
-          updatedAt: new Date(),
-        })
-        .where(eq(cell.id, c.id))
-
-      await tx
-        .update(provenance)
-        .set({ quote: null, sourceUrl: 'redacted:erasure' })
-        .where(eq(provenance.cellId, c.id))
+        .set({ state: 'expired', subjectId: null, updatedAt: new Date() })
+        .where(eq(cell.subjectId, personId))
     }
 
     await tx

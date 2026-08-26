@@ -132,7 +132,9 @@ export async function fixture(
     declaredUse?: DeclaredUse
     columnName?: string
     dataClass?: 'none' | 'business' | 'personal' | 'special'
-    retentionDays?: number
+    /** Explicit null means the column defers to the workspace default. */
+    retentionDays?: number | null
+    workspaceRetentionDays?: number
   } = {},
 ): Promise<Fixture> {
   const { db } = await database()
@@ -144,7 +146,11 @@ export async function fixture(
 
   const [ws] = await db
     .insert(workspace)
-    .values({ name: 'Test workspace', regionPin: 'eu-north-1' })
+    .values({
+      name: 'Test workspace',
+      regionPin: 'eu-north-1',
+      defaultRetentionDays: opts.workspaceRetentionDays ?? 180,
+    })
     .returning({ id: workspace.id })
 
   const use = opts.declaredUse ?? 'market_mapping'
@@ -168,7 +174,7 @@ export async function fixture(
       name: opts.columnName ?? 'Headquarters',
       prompt: 'Where is the company headquartered?',
       dataClass: opts.dataClass ?? 'business',
-      retentionDays: opts.retentionDays ?? 180,
+      retentionDays: opts.retentionDays === undefined ? 180 : opts.retentionDays,
     })
     .returning({ id: column.id })
 

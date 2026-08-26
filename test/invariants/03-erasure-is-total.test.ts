@@ -8,6 +8,13 @@
  *
  * The test scans the whole database rather than the tables we remember, so that
  * adding a table which stores a value cannot silently escape it.
+ *
+ * Scanning was never the weak point. The fixture was: it wrote a cell and
+ * nothing else, so `proposal` and `contest` were empty when the scan ran and
+ * the columns that actually leaked were never populated. A subject's name
+ * survived erasure in proposal.value for as long as this test was green. The
+ * fixture now builds every kind of row that can hold their data, and the
+ * registry the erasure walks is itself checked for completeness below.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -15,7 +22,8 @@ import { eq, sql } from 'drizzle-orm'
 import { fixture, sourced, type Fixture } from '../harness.js'
 import { writeCellValue } from '../../src/lib/write.js'
 import { erasePerson } from '../../src/lib/person.js'
-import { cell, person } from '../../src/db/schema.js'
+import { cell, contest, person, proposal } from '../../src/db/schema.js'
+import { SUBJECT_REACH, VALUE_BEARING } from '../../src/db/value-bearing.js'
 
 let f: Fixture
 
@@ -40,26 +48,123 @@ async function databaseContains(f: Fixture, needle: string): Promise<string[]> {
   return hits
 }
 
+/**
+ * Everything that can hold the subject's data: the cell and its provenance,
+ * an agent's proposal over it, and a contest raised against it.
+ */
+async function holdingsFor(f: Fixture): Promise<string> {
+  const { cellId, subjectId } = await writeCellValue(
+    { db: f.db, workspaceId: f.workspaceId, rowId: f.rowId, columnId: f.columnId },
+    sourced(SUBJECT),
+  )
+  expect(subjectId).toBeTruthy()
+
+  await f.db.insert(proposal).values({
+    cellId,
+    value: SUBJECT,
+    evidence: [{ url: 'https://example.com/team', quote: `${SUBJECT}, co-founder` }],
+  })
+
+  await f.db.insert(contest).values({
+    cellId,
+    raisedBy: 'subject',
+    raiserRef: 'dsr-inbox',
+    claim: `${SUBJECT} says this is out of date`,
+    counterEvidence: [{ url: 'https://example.com/now', note: `no longer ${SUBJECT}` }],
+    priorValue: SUBJECT,
+    note: `raised on behalf of ${SUBJECT}`,
+  })
+
+  return subjectId!
+}
+
 describe('invariant: erasure is total', () => {
   it('removes every trace of a person across every table', async () => {
     f = await fixture({ columnName: 'Founder', dataClass: 'personal' })
-    const ctx = {
-      db: f.db,
-      workspaceId: f.workspaceId,
-      rowId: f.rowId,
-      columnId: f.columnId,
-    }
+    const subjectId = await holdingsFor(f)
 
-    const { subjectId } = await writeCellValue(ctx, sourced(SUBJECT))
-    expect(subjectId).toBeTruthy()
+    // The subject is genuinely in there before we erase, and in more than one
+    // table — otherwise this test proves nothing about the ones it forgot.
+    const before = await databaseContains(f, SUBJECT)
+    expect(before).toEqual(
+      expect.arrayContaining([
+        'cell.value',
+        'provenance.quote',
+        'proposal.value',
+        'contest.claim',
+      ]),
+    )
 
-    // The subject is genuinely in there before we erase.
-    expect(await databaseContains(f, SUBJECT)).not.toHaveLength(0)
-
-    await erasePerson(f.db, subjectId!)
+    await erasePerson(f.db, subjectId)
 
     const hits = await databaseContains(f, SUBJECT)
     expect(hits, `subject data survived in: ${hits.join(', ')}`).toHaveLength(0)
+  })
+
+  it('classifies every column that could hold a value', async () => {
+    // The registry is what erasure walks, so a column missing from it is a
+    // column erasure will not reach. Adding a table is therefore a decision
+    // about erasure, taken here rather than discovered later.
+    f = await fixture()
+
+    const cols = await f.db.execute<{ table_name: string; column_name: string }>(sql`
+      SELECT table_name, column_name FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND data_type IN ('text','character varying','jsonb','json')
+    `)
+
+    const inSchema = cols.rows.map((c) => `${c.table_name}.${c.column_name}`)
+    const registered = new Set(VALUE_BEARING.map((c) => `${c.table}.${c.column}`))
+
+    const unclassified = inSchema.filter((k) => !registered.has(k))
+    expect(
+      unclassified,
+      `classify these in src/db/value-bearing.ts: ${unclassified.join(', ')}`,
+    ).toHaveLength(0)
+
+    const stale = [...registered].filter((k) => !inSchema.includes(k))
+    expect(stale, `no longer in the schema: ${stale.join(', ')}`).toHaveLength(0)
+
+    expect(VALUE_BEARING).toHaveLength(registered.size) // no duplicates
+  })
+
+  it('gives every subject column erasure walks something to become', async () => {
+    // A NOT NULL column cannot simply be nulled, and finding that out when a
+    // real erasure runs is the wrong time. Declared instead.
+    f = await fixture()
+
+    const notNull = await f.db.execute<{ table_name: string; column_name: string }>(sql`
+      SELECT table_name, column_name FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND is_nullable = 'NO'
+        AND data_type IN ('text','character varying','jsonb','json')
+    `)
+    const required = new Set(
+      notNull.rows.map((c) => `${c.table_name}.${c.column_name}`),
+    )
+
+    const missing = VALUE_BEARING.filter(
+      (c) =>
+        c.classification === 'subject' &&
+        c.table in SUBJECT_REACH &&
+        required.has(`${c.table}.${c.column}`) &&
+        c.redactTo === undefined,
+    ).map((c) => `${c.table}.${c.column}`)
+
+    expect(
+      missing,
+      `these are NOT NULL and need a redactTo: ${missing.join(', ')}`,
+    ).toHaveLength(0)
+  })
+
+  it('names the columns erasure cannot reach, and lets the list shrink only', () => {
+    // A gap that is written down can be argued with. One that is not gets
+    // rediscovered by somebody's regulator.
+    const unreachable = VALUE_BEARING.filter(
+      (c) => c.classification === 'unreachable',
+    ).map((c) => `${c.table}.${c.column}`)
+
+    expect(unreachable).toEqual(['row_entity.label'])
   })
 
   it('leaves a tombstone proving the erasure happened', async () => {

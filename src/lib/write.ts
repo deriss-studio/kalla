@@ -16,6 +16,7 @@ import {
   proposal,
   rowEntity,
   sheet,
+  workspace,
 } from '../db/schema.js'
 import { checkSpecialCategory } from './special.js'
 import { detectPersonalData, resolvePerson } from './person.js'
@@ -252,10 +253,15 @@ async function loadCellMeta(
       dataClass: column.dataClass,
       retentionDays: column.retentionDays,
       rowKind: rowEntity.kind,
-      workspaceRetentionDays: sql<number>`180`,
+      /**
+       * The workspace's own default, not a constant. A retention period the
+       * system reports has to be the one it actually applied.
+       */
+      workspaceRetentionDays: workspace.defaultRetentionDays,
     })
     .from(column)
     .innerJoin(sheet, eq(sheet.id, column.sheetId))
+    .innerJoin(workspace, eq(workspace.id, sheet.workspaceId))
     .innerJoin(
       rowEntity,
       and(eq(rowEntity.id, rowId), eq(rowEntity.sheetId, column.sheetId)),

@@ -47,6 +47,23 @@ describe('invariant: refresh preserves retention', () => {
     expect(row!.value).toBe('Stockholm, Sweden') // the value did move
   })
 
+  it('a column with no retention of its own uses the workspace default', async () => {
+    // The period the system reports has to be the period it applied. This read
+    // was a hardcoded 180 until the workspace was joined in, so a workspace
+    // that had chosen thirty days was silently given six months.
+    f = await fixture({ retentionDays: null, workspaceRetentionDays: 30 })
+
+    const { cellId } = await writeCellValue(
+      { db: f.db, workspaceId: f.workspaceId, rowId: f.rowId, columnId: f.columnId },
+      sourced('Stockholm'),
+    )
+
+    const expiry = await expiryOf(f, cellId)
+    const days = (expiry!.getTime() - Date.now()) / 86_400_000
+    expect(days).toBeGreaterThan(29)
+    expect(days).toBeLessThan(31)
+  })
+
   it('the database refuses a direct update that renews the clock', async () => {
     f = await fixture({ retentionDays: 30 })
     const { cellId } = await writeCellValue(
