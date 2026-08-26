@@ -134,6 +134,37 @@ Keep that pattern when you add one.
 
 A pull request that adds a write path without extending test 1 is incomplete.
 
+### How the harness runs them
+
+One PGlite per test *file*, truncated between tests — not one per test. Booting
+Postgres-in-WASM dominates the cost of this suite, and a database per test made
+CI time out rather than fail.
+
+Two things keep it fast, and both are easy to undo by accident:
+
+- **The schema is built once per run.** `test/global-setup.ts` migrates one
+  database, dumps its data directory, and every file restores from that dump.
+  `initdb` is the expensive half of starting PGlite and restoring skips it;
+  across the suite that is the difference between a ~10s slowest test and a
+  ~2s one.
+- **`pool: 'threads'`, capped at four workers.** Threads share a process, so
+  the WebAssembly is compiled once rather than once per worker. The cap is
+  there because the scarce resource is concurrent Postgres instances, not
+  cores: past four, wall time stops improving while the slowest test grows
+  several-fold — and it is the slowest test that has to stay clear of
+  `testTimeout`.
+
+If you meet a 13-second boot, the snapshot is not being used; check that
+`globalSetup` still runs. A missing snapshot is a legitimate fallback — a file
+run outside this config — and costs only speed. Any other failure to read it is
+raised rather than absorbed, because a silent downgrade to the slow path would
+hide a real fault.
+
+Isolation lives in the truncation, which is derived from the catalogue so a new
+table is covered without anyone remembering it. Assert it with
+`vitest --sequence.shuffle`, and do not answer a flaky test by giving it its own
+database again.
+
 ## How to work in this repo
 
 - **Schema before screens.** If a change touches both, propose the migration

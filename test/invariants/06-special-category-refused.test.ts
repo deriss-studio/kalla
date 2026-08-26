@@ -10,7 +10,7 @@
  * leak.
  */
 
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { eq, sql } from 'drizzle-orm'
 import { fixture, type Fixture } from '../harness.js'
 import { writeCellValue, type AgentResult } from '../../src/lib/write.js'
@@ -18,7 +18,6 @@ import { cell } from '../../src/db/schema.js'
 import { checkSpecialCategory } from '../../src/lib/special.js'
 
 let f: Fixture
-afterEach(async () => f?.close())
 
 const CASES: { label: string; value: string; category: string }[] = [
   { label: 'health', value: 'On sick leave following a cancer diagnosis', category: 'health' },

@@ -10,7 +10,7 @@
  * adding a table which stores a value cannot silently escape it.
  */
 
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { eq, sql } from 'drizzle-orm'
 import { fixture, sourced, type Fixture } from '../harness.js'
 import { writeCellValue } from '../../src/lib/write.js'
@@ -18,7 +18,6 @@ import { erasePerson } from '../../src/lib/person.js'
 import { cell, person } from '../../src/db/schema.js'
 
 let f: Fixture
-afterEach(async () => f?.close())
 
 const SUBJECT = 'Vera Exempel Testsson'
 

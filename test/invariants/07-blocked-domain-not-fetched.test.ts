@@ -9,7 +9,7 @@
  * not fetch it" is proven rather than asserted.
  */
 
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { eq, and } from 'drizzle-orm'
 import { fixture, type Fixture } from '../harness.js'
 import {
@@ -21,7 +21,6 @@ import {
 import { collectionLog } from '../../src/db/schema.js'
 
 let f: Fixture
-afterEach(async () => f?.close())
 
 function recordingFetcher(
   responses: Record<string, { body: string; status: number }> = {},

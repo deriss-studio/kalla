@@ -7,14 +7,13 @@
  * wrong by default; that is exactly why it is enforced rather than documented.
  */
 
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { eq, sql } from 'drizzle-orm'
 import { fixture, sourced, rejectionMessage, type Fixture } from '../harness.js'
 import { writeCellValue } from '../../src/lib/write.js'
 import { cell } from '../../src/db/schema.js'
 
 let f: Fixture
-afterEach(async () => f?.close())
 
 async function expiryOf(f: Fixture, cellId: string) {
   const [row] = await f.db

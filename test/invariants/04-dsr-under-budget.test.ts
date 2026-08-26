@@ -12,14 +12,13 @@
  * instance. Do not "fix" a slow full-scale run by lowering the CI numbers.
  */
 
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { sql } from 'drizzle-orm'
 import { fixture, type Fixture } from '../harness.js'
 import { subjectAccessPack } from '../../src/lib/dsr.js'
 import { person } from '../../src/db/schema.js'
 
 let f: Fixture
-afterEach(async () => f?.close())
 
 const SHEETS = 20
 const ROWS_PER_SHEET = 100

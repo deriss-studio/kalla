@@ -8,14 +8,13 @@
  * break if nothing stopped it.
  */
 
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { eq, sql } from 'drizzle-orm'
 import { fixture, sourced, rejectionMessage, type Fixture } from '../harness.js'
 import { writeCellValue, humanCorrectCell } from '../../src/lib/write.js'
 import { authorship, cell, proposal } from '../../src/db/schema.js'
 
 let f: Fixture
-afterEach(async () => f?.close())
 
 describe('invariant: a human-authored value stands', () => {
   it('an agent re-run proposes instead of overwriting', async () => {
