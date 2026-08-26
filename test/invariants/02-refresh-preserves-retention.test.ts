@@ -13,6 +13,7 @@ import { fixture, sourced, rejectionMessage, type Fixture } from '../harness.js'
 import { writeCellValue } from '../../src/lib/write.js'
 import { erasePerson } from '../../src/lib/person.js'
 import { sweepExpired } from '../../src/lib/retention.js'
+import { scanForValue } from '../../src/lib/audit.js'
 import { cell, expiryLog, person } from '../../src/db/schema.js'
 
 let f: Fixture
@@ -119,23 +120,6 @@ describe('invariant: refresh preserves retention', () => {
 describe('invariant: retention that has expired is deleted', () => {
   const SUBJECT = 'Vera Exempel Testsson'
 
-  /** Every text-ish column in every table, scanned for the value. */
-  async function databaseContains(f: Fixture, needle: string): Promise<string[]> {
-    const cols = await f.db.execute<{ table_name: string; column_name: string }>(sql`
-      SELECT table_name, column_name FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND data_type IN ('text','character varying','jsonb','json')
-    `)
-    const hits: string[] = []
-    for (const c of cols.rows) {
-      const found = await f.db.execute<{ n: number }>(
-        sql`SELECT count(*)::int AS n FROM ${sql.identifier(c.table_name)}
-            WHERE ${sql.identifier(c.column_name)}::text ILIKE ${'%' + needle + '%'}`,
-      )
-      if ((found.rows[0]?.n ?? 0) > 0) hits.push(`${c.table_name}.${c.column_name}`)
-    }
-    return hits
-  }
 
   /** Move a cell's clock into the past, through the auditable override. */
   async function backdate(f: Fixture, cellId: string) {
@@ -162,7 +146,7 @@ describe('invariant: retention that has expired is deleted', () => {
 
     // Present in more than one table before the sweep, or this proves nothing
     // about the tables it forgot.
-    expect(await databaseContains(f, SUBJECT)).toEqual(
+    expect((await scanForValue(f.db, SUBJECT)).found).toEqual(
       expect.arrayContaining(['cell.value', 'provenance.quote', 'person.display_name']),
     )
 
@@ -170,7 +154,7 @@ describe('invariant: retention that has expired is deleted', () => {
     const swept = await sweepExpired(f.db, f.workspaceId)
     expect(swept.cellsDeleted).toBe(1)
 
-    const hits = await databaseContains(f, SUBJECT)
+    const hits = (await scanForValue(f.db, SUBJECT)).found
     expect(hits, `expired value survived in: ${hits.join(', ')}`).toHaveLength(0)
 
     // Deleted, not marked. There is no row left to describe.

@@ -17,6 +17,7 @@ import { writeCellValue, type AgentResult } from '../../src/lib/write.js'
 import { cell } from '../../src/db/schema.js'
 import { checkSpecialCategory } from '../../src/lib/special.js'
 import { syntheticReceipt } from '../../src/lib/collection.js'
+import { scanForValue } from '../../src/lib/audit.js'
 
 let f: Fixture
 
@@ -35,23 +36,6 @@ const CASES: { label: string; value: string; category: string }[] = [
     category: 'sexual_orientation',
   },
 ]
-
-async function databaseContains(f: Fixture, needle: string): Promise<string[]> {
-  const cols = await f.db.execute<{ table_name: string; column_name: string }>(sql`
-    SELECT table_name, column_name FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND data_type IN ('text','character varying','jsonb','json')
-  `)
-  const hits: string[] = []
-  for (const c of cols.rows) {
-    const found = await f.db.execute<{ n: number }>(
-      sql`SELECT count(*)::int AS n FROM ${sql.identifier(c.table_name)}
-          WHERE ${sql.identifier(c.column_name)}::text ILIKE ${'%' + needle + '%'}`,
-    )
-    if ((found.rows[0]?.n ?? 0) > 0) hits.push(`${c.table_name}.${c.column_name}`)
-  }
-  return hits
-}
 
 describe('invariant: special categories are refused', () => {
   for (const c of CASES) {
@@ -76,7 +60,7 @@ describe('invariant: special categories are refused', () => {
       expect(row!.value).toBeNull()
       expect(row!.refusalReason).toBe(`special_category:${c.category}`)
 
-      const hits = await databaseContains(f, c.value)
+      const hits = (await scanForValue(f.db, c.value)).found
       expect(hits, `special-category value leaked into: ${hits.join(', ')}`).toHaveLength(0)
     })
   }
@@ -101,7 +85,7 @@ describe('invariant: special categories are refused', () => {
     )
 
     expect(outcome.state).toBe('refused')
-    expect(await databaseContains(f, 'Union member since 2019')).toHaveLength(0)
+    expect((await scanForValue(f.db, 'Union member since 2019')).found).toHaveLength(0)
   })
 
   it('does not refuse ordinary business facts', async () => {

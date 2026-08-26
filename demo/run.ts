@@ -33,6 +33,7 @@ import { guardedFetch, type Fetcher } from '../src/lib/collection.js'
 import { raiseContest, resolveContest } from '../src/lib/contest.js'
 import { subjectAccessPack } from '../src/lib/dsr.js'
 import { erasePerson } from '../src/lib/person.js'
+import { scanForValue } from '../src/lib/audit.js'
 import { registerAdapter, selectAdapter } from '../src/lib/models.js'
 import { createRow, writeCellValue } from '../src/lib/write.js'
 import {
@@ -247,28 +248,6 @@ async function readSheet(db: Db, sheetId: string) {
   return { cols, rows, cells }
 }
 
-/**
- * Demo-local, and written for the third time. See FINDINGS.
- */
-async function databaseContains(
-  db: Db,
-  needle: string,
-): Promise<{ scanned: number; found: string[] }> {
-  const cols = await db.execute<{ table_name: string; column_name: string }>(sql`
-    SELECT table_name, column_name FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND data_type IN ('text','character varying','jsonb','json')
-  `)
-  const found: string[] = []
-  for (const c of cols.rows) {
-    const hit = await db.execute<{ n: number }>(
-      sql`SELECT count(*)::int AS n FROM ${sql.identifier(c.table_name)}
-          WHERE ${sql.identifier(c.column_name)}::text ILIKE ${'%' + needle + '%'}`,
-    )
-    if ((hit.rows[0]?.n ?? 0) > 0) found.push(`${c.table_name}.${c.column_name}`)
-  }
-  return { scanned: cols.rows.length, found }
-}
 
 async function momentSheet(s: Seed): Promise<void> {
   step('A SHEET, FILLED')
@@ -381,14 +360,14 @@ async function momentAccess(s: Seed): Promise<void> {
 async function momentErasure(s: Seed): Promise<void> {
   step('ERASURE, AND THE PROOF')
 
-  const before = await databaseContains(s.db, SUBJECT)
+  const before = await scanForValue(s.db, SUBJECT)
   note(`Before: the name appears in ${bold(String(before.found.length))} places`)
   for (const hit of before.found) console.log('    ' + amber(hit))
   blank()
 
   await erasePerson(s.db, s.subjectId)
 
-  const { scanned, found: after } = await databaseContains(s.db, SUBJECT)
+  const { scanned, found: after } = await scanForValue(s.db, SUBJECT)
   note(
     `After erasure, scanning all ${bold(String(scanned))} text columns in the database:`,
   )
@@ -509,12 +488,6 @@ function findings(): void {
       'Nothing in src/ reads a sheet for display. This walkthrough queries the',
       'tables directly to draw the grid. Every write path is covered by an',
       'invariant; the read side has no function and no test.',
-    ],
-    [
-      'The erasure proof is not a library function.',
-      'The whole-database scan is written three times now: twice in the tests',
-      'and again here. It is the artifact that proves erasure, so it belongs in',
-      'src/ where a DPO-facing answer can call it.',
     ],
     [
       'Sheets and columns are configured by hand.',

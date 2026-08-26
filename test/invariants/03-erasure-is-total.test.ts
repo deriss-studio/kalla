@@ -24,29 +24,12 @@ import { writeCellValue } from '../../src/lib/write.js'
 import { erasePerson } from '../../src/lib/person.js'
 import { cell, contest, person, proposal, sheet } from '../../src/db/schema.js'
 import { SUBJECT_REACH, VALUE_BEARING } from '../../src/db/value-bearing.js'
+import { scanForValue } from '../../src/lib/audit.js'
 
 let f: Fixture
 
 const SUBJECT = 'Vera Exempel Testsson'
 
-/** Every text-ish column in every table, scanned for the subject's data. */
-async function databaseContains(f: Fixture, needle: string): Promise<string[]> {
-  const cols = await f.db.execute<{ table_name: string; column_name: string }>(sql`
-    SELECT table_name, column_name FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND data_type IN ('text','character varying','jsonb','json')
-  `)
-
-  const hits: string[] = []
-  for (const c of cols.rows) {
-    const found = await f.db.execute<{ n: number }>(
-      sql`SELECT count(*)::int AS n FROM ${sql.identifier(c.table_name)}
-          WHERE ${sql.identifier(c.column_name)}::text ILIKE ${'%' + needle + '%'}`,
-    )
-    if ((found.rows[0]?.n ?? 0) > 0) hits.push(`${c.table_name}.${c.column_name}`)
-  }
-  return hits
-}
 
 /**
  * Everything that can hold the subject's data: the cell and its provenance,
@@ -85,20 +68,34 @@ describe('invariant: erasure is total', () => {
 
     // The subject is genuinely in there before we erase, and in more than one
     // table — otherwise this test proves nothing about the ones it forgot.
-    const before = await databaseContains(f, SUBJECT)
+    const before = (await scanForValue(f.db, SUBJECT)).found
     expect(before).toEqual(
       expect.arrayContaining([
         'cell.value',
         'provenance.quote',
         'proposal.value',
         'contest.claim',
+        // A jsonb column, and not incidentally: proposal.evidence is where the
+        // subject's name survived erasure for as long as this test was green.
+        // If the scan ever stops looking inside jsonb, it stops looking where
+        // the leak actually was.
+        'proposal.evidence',
+        'contest.counter_evidence',
       ]),
     )
 
     await erasePerson(f.db, subjectId)
 
-    const hits = await databaseContains(f, SUBJECT)
+    const hits = (await scanForValue(f.db, SUBJECT)).found
     expect(hits, `subject data survived in: ${hits.join(', ')}`).toHaveLength(0)
+  })
+
+  it('refuses to scan for nothing', async () => {
+    // An empty needle matches every row of every column. Whichever way the
+    // result were read — "found everywhere" or "the scan ran" — it would be a
+    // lie about an erasure, so it is refused rather than answered.
+    f = await fixture()
+    await expect(scanForValue(f.db, '   ')).rejects.toThrow(/empty value/)
   })
 
   it('classifies every column that could hold a value', async () => {
@@ -174,7 +171,7 @@ describe('invariant: erasure is total', () => {
 
     // Exactly the retained column, and no other. This is the strong form: it
     // proves the retention AND that everything else still went.
-    expect(await databaseContains(f, SUBJECT)).toEqual(['sheet.purpose'])
+    expect((await scanForValue(f.db, SUBJECT)).found).toEqual(['sheet.purpose'])
   })
 
   it('records a ground for every column retained through an erasure', () => {
