@@ -8,6 +8,13 @@
       "when": 1787762123021,
       "tag": "0000_goofy_darkstar",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787772479082,
+      "tag": "0001_nice_molly_hayes",
+      "breakpoints": true
     }
   ]
 }

@@ -71,8 +71,8 @@ describe('invariant: no value without provenance', () => {
     // deferred constraint trigger cannot.
     const message = await rejectionMessage(() =>
       f.db.execute(sql`
-        INSERT INTO cell (row_id, column_id, value, state)
-        VALUES (${f.rowId}::uuid, ${f.columnId}::uuid, 'Stockholm', 'filled')
+        INSERT INTO cell (row_id, column_id, sheet_id, value, state)
+        VALUES (${f.rowId}::uuid, ${f.columnId}::uuid, ${f.sheetId}::uuid, 'Stockholm', 'filled')
       `),
     )
     expect(message).toMatch(/no provenance record/i)

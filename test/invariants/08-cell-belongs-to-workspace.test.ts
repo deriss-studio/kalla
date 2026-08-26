@@ -16,8 +16,8 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { eq } from 'drizzle-orm'
-import { fixture, sourced, type Fixture } from '../harness.js'
+import { eq, sql } from 'drizzle-orm'
+import { fixture, rejectionMessage, sourced, type Fixture } from '../harness.js'
 import { writeCellValue, humanCorrectCell } from '../../src/lib/write.js'
 import { cell, column, rowEntity, sheet, workspace } from '../../src/db/schema.js'
 
@@ -124,6 +124,51 @@ describe('the write path refuses a cell outside its workspace', () => {
 
     const [row] = await f.db.select().from(cell).where(eq(cell.id, cellId))
     expect(row!.value).toBe('Oslo, Norway')
+  })
+
+  it('the database refuses a cross-sheet pairing inserted directly, bypassing the write path', async () => {
+    // The structural half is a pair of composite foreign keys, so it holds for
+    // a migration written at midnight and a code path nobody remembered. Both
+    // directions are checked: whichever sheet the row claims, the other key is
+    // the one that catches it.
+    f = await fixture()
+    const second = await sheetIn(f, f.workspaceId, 'A second sheet')
+
+    const claimingTheRowsSheet = await rejectionMessage(() =>
+      f.db.execute(sql`
+        INSERT INTO cell (row_id, column_id, sheet_id, value, state)
+        VALUES (${f.rowId}::uuid, ${second.columnId}::uuid, ${f.sheetId}::uuid,
+                'Stockholm', 'filled')
+      `),
+    )
+    expect(claimingTheRowsSheet).toMatch(/cell_column_in_sheet_fk/i)
+
+    const claimingTheColumnsSheet = await rejectionMessage(() =>
+      f.db.execute(sql`
+        INSERT INTO cell (row_id, column_id, sheet_id, value, state)
+        VALUES (${f.rowId}::uuid, ${second.columnId}::uuid, ${second.sheetId}::uuid,
+                'Stockholm', 'filled')
+      `),
+    )
+    expect(claimingTheColumnsSheet).toMatch(/cell_row_in_sheet_fk/i)
+
+    expect(await f.db.select().from(cell)).toHaveLength(0)
+  })
+
+  it('deleting a sheet still removes its cells', async () => {
+    // The composite keys replaced the single-column ones, and the cascade came
+    // with them. Had it been lost in the rewrite, deleting a sheet would fail
+    // on its own cells instead of taking them with it.
+    f = await fixture()
+    await writeCellValue(
+      { db: f.db, workspaceId: f.workspaceId, rowId: f.rowId, columnId: f.columnId },
+      sourced('Stockholm, Sweden'),
+    )
+    expect(await f.db.select().from(cell)).toHaveLength(1)
+
+    await f.db.delete(sheet).where(eq(sheet.id, f.sheetId))
+
+    expect(await f.db.select().from(cell)).toHaveLength(0)
   })
 
   it('still writes when the row, the column and the workspace agree', async () => {

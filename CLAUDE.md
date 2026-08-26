@@ -107,11 +107,17 @@ These live in `test/invariants/` and run in CI. They are not ordinary unit
 tests — they exist to make the four commitments mechanically enforced rather
 than remembered. Do not weaken them to make a feature pass.
 
-Four of them are backed by database triggers in `src/db/triggers.sql`, so the
+Five of them are enforced by the database rather than by discipline, so the
 invariant survives a code path that forgets it, a migration written at
-midnight, or a well-meaning refactor. Each of those tests has a case that
-bypasses the application layer entirely and asserts the database still refuses.
-Keep that pattern when you add one.
+midnight, or a well-meaning refactor. Four are triggers in
+`src/db/triggers.sql`; the structural half of invariant 8 is a pair of
+composite foreign keys on `cell`, which is better still — a constraint cannot
+be dropped by a code path the way a trigger can, and it takes a join out of
+every sheet-scoped query. Prefer a constraint where the invariant is
+structural; reach for a trigger when it is conditional.
+
+Each of those tests has a case that bypasses the application layer entirely and
+asserts the database still refuses. Keep that pattern when you add one.
 
 1. `no-value-without-provenance` — insert a cell value by every available code
    path; assert each produces a provenance row.

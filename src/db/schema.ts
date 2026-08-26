@@ -19,6 +19,7 @@ import {
   integer,
   boolean,
   jsonb,
+  foreignKey,
   index,
   uniqueIndex,
   real,
@@ -162,7 +163,11 @@ export const column = pgTable(
     sourcePolicy: jsonb('source_policy').$type<Record<string, unknown> | null>(),
     position: integer('position').notNull().default(0),
   },
-  (t) => [uniqueIndex('column_sheet_key_idx').on(t.sheetId, t.key)],
+  (t) => [
+    uniqueIndex('column_sheet_key_idx').on(t.sheetId, t.key),
+    /** Referenced by cell's composite foreign key. See the cell table. */
+    uniqueIndex('column_id_sheet_idx').on(t.id, t.sheetId),
+  ],
 )
 
 /* ------------------------------------------------------------ row entity */
@@ -178,7 +183,11 @@ export const rowEntity = pgTable(
     label: text('label').notNull(),
     position: integer('position').notNull().default(0),
   },
-  (t) => [index('row_sheet_idx').on(t.sheetId)],
+  (t) => [
+    index('row_sheet_idx').on(t.sheetId),
+    /** Referenced by cell's composite foreign key. See the cell table. */
+    uniqueIndex('row_id_sheet_idx').on(t.id, t.sheetId),
+  ],
 )
 
 /* ---------------------------------------------------------------- person */
@@ -222,12 +231,14 @@ export const cell = pgTable(
   'cell',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    rowId: uuid('row_id')
-      .notNull()
-      .references(() => rowEntity.id, { onDelete: 'cascade' }),
-    columnId: uuid('column_id')
-      .notNull()
-      .references(() => column.id, { onDelete: 'cascade' }),
+    rowId: uuid('row_id').notNull(),
+    columnId: uuid('column_id').notNull(),
+    /**
+     * The sheet this cell sits in, carried on the row so that the composite
+     * foreign keys below can insist the row and the column agree about it.
+     * Also spares every sheet-scoped query a join.
+     */
+    sheetId: uuid('sheet_id').notNull(),
     value: text('value'),
     state: cellState('state').notNull().default('empty'),
     refusalReason: text('refusal_reason'),
@@ -253,6 +264,26 @@ export const cell = pgTable(
     uniqueIndex('cell_row_column_idx').on(t.rowId, t.columnId),
     /** The index that makes the subject access request fast. */
     index('cell_subject_idx').on(t.subjectId),
+    /**
+     * The structural half of invariant 8, declared rather than enforced by a
+     * trigger. A cell's row and its column must belong to the same sheet, and
+     * because both keys carry the same sheet_id there is no pairing across
+     * sheets — or across workspaces, since a sheet belongs to exactly one.
+     *
+     * A constraint cannot be forgotten by a new code path the way a check in
+     * the write path can, and unlike a trigger it cannot be dropped by one
+     * either.
+     */
+    foreignKey({
+      name: 'cell_row_in_sheet_fk',
+      columns: [t.rowId, t.sheetId],
+      foreignColumns: [rowEntity.id, rowEntity.sheetId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'cell_column_in_sheet_fk',
+      columns: [t.columnId, t.sheetId],
+      foreignColumns: [column.id, column.sheetId],
+    }).onDelete('cascade'),
   ],
 )
 

@@ -77,12 +77,12 @@ export async function writeCellValue(
     ...result.sources.map((s) => s.quote),
   )
   if (special.special) {
-    const cellId = await upsertRefusal(db, rowId, columnId, special.category)
+    const cellId = await upsertRefusal(db, ctx, meta.sheetId, special.category)
     return { cellId, state: 'refused', refusedCategory: special.category }
   }
 
   if (result.state !== 'filled' || result.value === null) {
-    const cellId = await upsertNonValue(db, rowId, columnId, result)
+    const cellId = await upsertNonValue(db, ctx, meta.sheetId, result)
     return { cellId, state: result.state }
   }
 
@@ -141,6 +141,7 @@ export async function writeCellValue(
         .values({
           rowId,
           columnId,
+          sheetId: meta.sheetId,
           value: result.value,
           state: 'filled',
           subjectId,
@@ -249,6 +250,7 @@ async function loadCellMeta(
 ) {
   const [meta] = await db
     .select({
+      sheetId: sheet.id,
       columnName: column.name,
       dataClass: column.dataClass,
       retentionDays: column.retentionDays,
@@ -319,15 +321,17 @@ async function currentCell(db: Db, rowId: string, columnId: string) {
 
 async function upsertRefusal(
   db: Db,
-  rowId: string,
-  columnId: string,
+  ctx: WriteContext,
+  sheetId: string,
   category: string,
 ): Promise<string> {
+  const { rowId, columnId } = ctx
   const [row] = await db
     .insert(cell)
     .values({
       rowId,
       columnId,
+      sheetId,
       value: null,
       state: 'refused',
       refusalReason: `special_category:${category}`,
@@ -347,16 +351,18 @@ async function upsertRefusal(
 
 async function upsertNonValue(
   db: Db,
-  rowId: string,
-  columnId: string,
+  ctx: WriteContext,
+  sheetId: string,
   result: AgentResult,
 ): Promise<string> {
+  const { rowId, columnId } = ctx
   const state = result.state === 'blocked' ? 'refused' : 'not_found'
   const [row] = await db
     .insert(cell)
     .values({
       rowId,
       columnId,
+      sheetId,
       value: null,
       state,
       refusalReason: result.state === 'blocked' ? 'domain_blocked' : result.notes ?? null,

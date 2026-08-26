@@ -62,8 +62,8 @@ describe('invariant: subject access returns within budget', () => {
         RETURNING id, sheet_id
       ),
       new_cells AS (
-        INSERT INTO cell (row_id, column_id, value, state, subject_id, retention_expires_at)
-        SELECT r.id, c.id,
+        INSERT INTO cell (row_id, column_id, sheet_id, value, state, subject_id, retention_expires_at)
+        SELECT r.id, c.id, r.sheet_id,
                'Person ' || row_number() OVER (),
                'filled',
                CASE WHEN row_number() OVER () % ${Math.floor(
