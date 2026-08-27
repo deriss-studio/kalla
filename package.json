@@ -5,7 +5,7 @@
     "node": ">=22",
     "npm": ">=10"
   },
-  "description": "A European agentic spreadsheet. Every cell knows where it came from.",
+  "description": "Make the spreadsheet you already have accountable: provenance, retention and erasure you can prove.",
   "main": "index.js",
   "scripts": {
     "test": "vitest run",

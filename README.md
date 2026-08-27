@@ -9,7 +9,7 @@ in one query and prove an erasure afterwards. No agents, no cloud, no account â€
 it runs on your machine and the data never leaves it.
 
 ```bash
-git clone https://github.com/deriss/kalla && cd kalla && npm install
+git clone https://github.com/deriss-studio/kalla && cd kalla && npm install
 
 npm run kalla -- init   --actor you@example.com
 npm run kalla -- import leads.csv --sheet "Q3 leads" --purpose "Qualify inbound leads"
