@@ -6,6 +6,10 @@ node_modules/
 # this, imports their leads and commits would publish their own personal data,
 # which for this tool would be a special kind of failure.
 .kalla/
+# Recordings are ignored by default for the same reason: a cast made during a
+# real session captures whatever was on screen, including imported data.
 *.cast
+# The shipped walkthrough is the one deliberate exception.
+!docs/kalla2.cast
 dist/
 .DS_Store
