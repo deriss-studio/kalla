@@ -104,6 +104,12 @@ async function resolveSheet(db: Db, workspaceId: string, ref: string): Promise<s
   return fail(`"${ref}" matches more than one sheet. use the id.`)
 }
 
+/** How a person reads to a human: their name, or their identifier without the
+ *  kind prefix. "email:vera@example.test" is an internal key, not a person. */
+function nameOf(p: { displayName: string | null; canonicalKey: string }): string {
+  return p.displayName ?? p.canonicalKey.replace(/^(email|profile|phone|name):/, '')
+}
+
 /** One person, or a refusal to guess which. */
 async function resolveSubject(db: Db, workspaceId: string, query: string) {
   const found = await findPeople(db, workspaceId, query)
@@ -466,7 +472,7 @@ async function cmdSubject(args: string[]): Promise<void> {
   const elapsed = Date.now() - started
   await close()
 
-  heading(`Everything held about ${pack.subject.displayName ?? subject.canonicalKey}`)
+  heading(`Everything held about ${nameOf({ ...pack.subject, canonicalKey: subject.canonicalKey })}`)
   kv('Lawful basis', pack.subject.lawfulBasis)
   kv('First seen', when(pack.subject.firstSeenAt))
   kv('Answered in', `${elapsed} ms`)
@@ -525,7 +531,7 @@ async function cmdErase(args: string[]): Promise<void> {
   const subject = await resolveSubject(db, cfg.workspaceId, query)
   const pack = await subjectAccessPack(db, subject.id)
 
-  const name = pack.subject.displayName ?? subject.canonicalKey
+  const name = nameOf({ ...pack.subject, canonicalKey: subject.canonicalKey })
   const predicted = [...new Set(pack.retained.map((r) => `${r.table}.${r.column}`))].sort()
 
   if (!values.confirm) {
