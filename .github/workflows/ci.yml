@@ -2,7 +2,7 @@ name: invariants
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
 
 jobs:
@@ -16,6 +16,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      # The seven invariants. These are the specification, not a smoke test.
+      # The thirteen invariants. These are the specification, not a smoke test.
       # If one fails, the change is wrong — do not weaken the test to pass.
       - run: npm test
