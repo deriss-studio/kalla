@@ -7,7 +7,7 @@ information. Please do not open a public issue for one.
 
 ## Reporting
 
-**security@deriss.com**
+**soheill@deriss.com**
 
 If you would rather encrypt it, say so in a first message with no detail and I
 will send a key.
