@@ -90,7 +90,7 @@ describe('invariant: special categories are refused', () => {
 
   it('does not refuse ordinary business facts', async () => {
     const clean = checkSpecialCategory(
-      'Series B, €40M, led by Sequoia. Headquartered in Stockholm.',
+      'Series B, €40M, led by Exempel Ventures. Headquartered in Stockholm.',
     )
     expect(clean.special).toBe(false)
   })

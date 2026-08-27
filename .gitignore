@@ -1,5 +1,11 @@
 node_modules/
 .env
 .env.local
+
+# Workspace state: a real database of whatever you imported. A user who clones
+# this, imports their leads and commits would publish their own personal data,
+# which for this tool would be a special kind of failure.
+.kalla/
+*.cast
 dist/
 .DS_Store

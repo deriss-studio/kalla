@@ -244,6 +244,10 @@ If that sounds interesting, open an issue and say so. The same goes for anyone
 who wants to argue with the invariants — that is the most useful contribution
 this repository can receive, and it is a shorter conversation than it sounds.
 
+[CONTRIBUTING.md](CONTRIBUTING.md) says what helps most, and it is probably not
+what you would guess. A path that defeats an invariant is a security report
+rather than a bug report — see [SECURITY.md](SECURITY.md).
+
 ## Where things live
 
 ```
