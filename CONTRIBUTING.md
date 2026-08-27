@@ -26,6 +26,17 @@ there is a test saying so. Open the PR even if you have not fixed it.
 The floors in that file may be raised. They must never be lowered to make a
 change pass.
 
+## The open problem most in need of someone
+
+[Issue #1: one human, two entities][issue-1]. A person resolved by their name
+and the same person resolved by their email are two records, so an access
+response and an erasure receipt can both be confidently incomplete. There is a
+proposed design in the issue — links rather than merges, a named human
+confirming, erasure following the links — and it is a proposal rather than a
+settled thing.
+
+If you would rather start smaller, the corpus above is the place.
+
 ## Proposing a new invariant
 
 The numbered tests in `test/invariants/` are not "tests we care about more".
@@ -101,3 +112,5 @@ npm run demo      # the walkthrough, if you want to see the shape
 
 A path that defeats an invariant is a security report rather than a bug report.
 See [SECURITY.md](SECURITY.md) — please do not open a public issue for one.
+
+[issue-1]: https://github.com/deriss-studio/kalla/issues/1

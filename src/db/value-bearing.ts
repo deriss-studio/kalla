@@ -9,7 +9,7 @@
  * check that erasure covered them all.
  *
  * This is that declaration. Every text-ish column in the schema appears here
- * exactly once, and `test/invariants/03-erasure-is-total` fails if one does
+ * exactly once, and `test/invariants/03-erasure-is-total.test.ts` fails if one does
  * not — so a table added next year cannot quietly escape erasure. The
  * classification is the interesting part; the erasure code is downstream of it.
  */

@@ -72,7 +72,10 @@ unless you have found something worse than what is described:
 - **One human can be two entities.** A person resolved by name and the same
   person resolved by their email are separate records, so an access response
   and an erasure receipt can both be confidently incomplete. This is the largest
-  known correctness problem here and is written up in full in the issue tracker.
+  known correctness problem here, and it is written up in full as
+  [issue #1](https://github.com/deriss-studio/kalla/issues/1) — including a reproduction showing an erasure receipt
+  that reports "nothing survived" while the person's email address is still in
+  the sheet.
 - **Detection is a judgement.** It is held to a measured floor in both
   directions by `test/identity-corpus.ts`, and it will still be wrong about data
   the corpus does not cover. A case it gets wrong is a welcome corpus

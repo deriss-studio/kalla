@@ -207,6 +207,13 @@ is the most important open problem in the repository — it makes an Article 15
 answer look complete while missing half of what is held — and identity
 resolution across identifier types is the next substantive piece of work.
 
+It is written up in full as [issue #1](https://github.com/deriss-studio/kalla/issues/1), with a proposed design:
+identifiers linking to one person, co-occurrence proposing rather than
+performing, a human confirming with their name recorded, erasure following the
+links, and unconfirmed candidates disclosed rather than silently omitted. It is
+the piece I would most like help with, and the design is a proposal rather than
+a specification — a better one is welcome.
+
 **Detection is a judgement, not a constraint.** It is held to a stated floor in
 both directions by a labelled corpus (`test/identity-corpus.ts`), and the floor
 can only be raised. It will still be wrong about your data in ways the corpus
@@ -243,9 +250,10 @@ appear at the thousandth row. The substrate is deliberately shaped to receive
 it: the collection gate, the model adapter and the cell agent contract are all
 built and tested with nothing driving them.
 
-If that sounds interesting, open an issue and say so. The same goes for anyone
-who wants to argue with the invariants — that is the most useful contribution
-this repository can receive, and it is a shorter conversation than it sounds.
+If that sounds interesting, [open an issue](https://github.com/deriss-studio/kalla/issues) and say so. The same goes
+for anyone who wants to argue with the invariants — that is the most useful
+contribution this repository can receive, and it is a shorter conversation than
+it sounds.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) says what helps most, and it is probably not
 what you would guess. A path that defeats an invariant is a security report

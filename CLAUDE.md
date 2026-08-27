@@ -132,7 +132,7 @@ not make a sovereignty claim the hosting does not support.
 
 ## Model access
 
-Never hardcode a provider. All model calls go through `lib/models/adapter.ts`.
+Never hardcode a provider. All model calls go through `src/lib/models.ts`.
 Every call records `model_id` and `model_region` into provenance. A provider
 that cannot report its processing region is not eligible.
 
