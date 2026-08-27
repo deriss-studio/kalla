@@ -8,6 +8,8 @@ entities rather than strings, so you can answer "everything you hold about me"
 in one query and prove an erasure afterwards. No agents, no cloud, no account —
 it runs on your machine and the data never leaves it.
 
+[![Six moments: provenance, subject access, and a provable erasure](https://asciinema.org/a/F3jFsQSeV5jdhBxN.svg)](https://asciinema.org/a/F3jFsQSeV5jdhBxN)
+
 ```bash
 git clone https://github.com/deriss-studio/kalla && cd kalla && npm install
 
@@ -21,7 +23,8 @@ That last command writes a receipt: what it predicted would survive the
 erasure, what actually survived after scanning every text column in the
 database, and whether those two agreed.
 
-`npm run demo` walks the same ground in six moments, with pauses to talk over.
+The recording above is `npm run demo`, which walks the same ground in six
+moments with pauses to talk over. `docs/kalla2.cast` is the source.
 
 ---
 
