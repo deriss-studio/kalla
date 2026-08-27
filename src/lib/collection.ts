@@ -73,8 +73,11 @@ export function syntheticReceipt(
   })
 }
 
-/** The sentinel domain for a file the controller supplied. */
-export const IMPORTED = 'imported-file'
+/**
+ * The sentinel domain for anything the controller supplied rather than the
+ * system collected: a file they imported, a value they typed.
+ */
+export const SUPPLIED = 'supplied-by-controller'
 
 /**
  * A receipt for a value that arrived in a file rather than off the web.
@@ -91,10 +94,27 @@ export const IMPORTED = 'imported-file'
 export function importReceipt(file: string, importedBy: string): CollectionReceipt {
   return mint({
     url: `file://${file}`,
-    domain: IMPORTED,
+    domain: SUPPLIED,
     robotsState: 'n/a',
     aiTxtState: 'n/a',
     crawlerId: `import:${importedBy}`,
+    retrievedAt: new Date(),
+    synthetic: false,
+  })
+}
+
+/**
+ * A receipt for a value a person typed. The same category as an import: the
+ * controller supplied it, nothing was fetched, and it asserts no collection
+ * state.
+ */
+export function typedReceipt(actor: string): CollectionReceipt {
+  return mint({
+    url: `human://${actor}`,
+    domain: SUPPLIED,
+    robotsState: 'n/a',
+    aiTxtState: 'n/a',
+    crawlerId: `typed:${actor}`,
     retrievedAt: new Date(),
     synthetic: false,
   })

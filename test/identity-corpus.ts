@@ -78,6 +78,11 @@ export const IDENTIFYING: Case[] = [
     why: 'a profile URL without a scheme',
   },
   {
+    value: 'vera@example.test',
+    context: { columnName: 'Company', columnDataClass: 'business' },
+    why: 'an email identifies even where the column expects a company',
+  },
+  {
     value: '+46 70 123 45 67',
     context: { columnName: 'Phone', columnDataClass: 'personal' },
     why: 'a phone number where a phone number is expected',
@@ -108,6 +113,21 @@ export const JUNK: Case[] = [
   { value: 'Series B', context: HQ, why: 'a funding stage' },
   { value: 'NOT_FOUND', context: HQ, why: 'the correct answer to an unanswerable prompt' },
   { value: 'SaaS', context: HQ, why: 'a category' },
+  {
+    value: 'Vindkraft Nordic AB',
+    context: { columnName: 'Company', columnDataClass: 'business' },
+    why: 'a company with the shape of a name, in a column that says company',
+  },
+  {
+    value: 'Solstråle Energi',
+    context: { columnName: 'Supplier', columnDataClass: 'business' },
+    why: 'the same, without a legal form to give it away',
+  },
+  {
+    value: 'Vindkraft Nordic AB',
+    context: { rowKind: 'organisation' },
+    why: 'a row label, where the row declares itself an organisation',
+  },
 ]
 
 /**
@@ -134,6 +154,13 @@ export const UNCERTAIN: Case[] = [
     value: 'contact@',
     context: FOUNDER,
     why: 'the shape of an email, and not an email',
+  },
+  {
+    value: 'Ingrid Vasastan',
+    context: { columnName: 'Notes', columnDataClass: 'business', rowKind: 'organisation' },
+    why:
+      'a person named in a note about a company. The row being an organisation ' +
+      'must not suppress this: the column is where the doubt lives',
   },
   {
     value: 'Vera Exempel Testsson',

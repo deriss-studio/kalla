@@ -14,7 +14,7 @@
  * without anyone editing this file.
  */
 
-import { eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { Db } from '../db/client.js'
 import {
   cell,
@@ -294,6 +294,38 @@ function subjectNeedles(
 ): string[] {
   const identifier = canonicalKey.replace(/^(email|profile|phone|name):/, '')
   return [...new Set([displayName, identifier].filter((n): n is string => !!n?.trim()))]
+}
+
+/**
+ * Find the people a query might mean, within one workspace.
+ *
+ * Matches display name and canonical key, so an email or a profile handle
+ * finds them as readily as a name does. Returns candidates rather than
+ * guessing: acting on the wrong person is the one mistake an erasure cannot
+ * take back.
+ */
+export async function findPeople(
+  db: Db,
+  workspaceId: string,
+  query: string,
+): Promise<{ id: string; displayName: string | null; canonicalKey: string; erasureState: string }[]> {
+  if (!query.trim()) return []
+  return db
+    .select({
+      id: person.id,
+      displayName: person.displayName,
+      canonicalKey: person.canonicalKey,
+      erasureState: person.erasureState,
+    })
+    .from(person)
+    .where(
+      and(
+        eq(person.workspaceId, workspaceId),
+        sql`(coalesce(${person.displayName}, '') ILIKE ${'%' + query + '%'}
+             OR ${person.canonicalKey} ILIKE ${'%' + query + '%'})`,
+      ),
+    )
+    .orderBy(person.displayName)
 }
 
 export async function recordRequest(

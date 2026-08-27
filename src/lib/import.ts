@@ -78,8 +78,11 @@ export function slug(header: string): string {
  * returns a proposal rather than importing anything.
  */
 export function suggestPlan(headers: string[]): ImportPlan {
+  // Whole signals only. A bare `first` or `last` matches "Last round", which
+  // is a funding stage; proposing personal for it is the over-flagging that
+  // fills a person table with things that are not people.
   const PERSONAL =
-    /\b(name|first|last|surname|email|e-mail|phone|mobile|tel|linkedin|contact|owner|founder|ceo|manager|director|candidate|person)\b/i
+    /\b(name|full[ _-]?name|first[ _-]?name|last[ _-]?name|surname|email|e-mail|phone|mobile|linkedin|contact|owner|founder|ceo|cto|manager|director|candidate|person)\b/i
   const SPECIAL = /\b(health|medical|religion|union|ethnic|race|sexual|criminal|conviction|biometric)\b/i
 
   return {
@@ -118,6 +121,20 @@ export async function importCsv(
   if (unknown.length > 0) {
     throw new Error(
       `these columns are not in the file: ${unknown.map((c) => c.header).join(', ')}`,
+    )
+  }
+
+  // A sheet that already carries these keys is a different question from an
+  // empty one, and the unique index would say so in SQL. Say it in words.
+  const { readSheet } = await import('./sheets.js')
+  const existing = await readSheet(db, workspaceId, sheetId)
+  const taken = new Set((existing?.columns ?? []).map((c) => c.key))
+  const collides = held
+    .map((c) => c.key ?? slug(c.header))
+    .filter((k) => taken.has(k))
+  if (collides.length > 0) {
+    throw new Error(
+      `the sheet already has columns named ${collides.join(', ')}. Import into a new sheet, or change the keys in the plan.`,
     )
   }
 

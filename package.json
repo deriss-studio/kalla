@@ -8,7 +8,8 @@
     "dev": "vitest",
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
-    "demo": "tsx demo/run.ts"
+    "demo": "tsx demo/run.ts",
+    "kalla": "tsx cli/index.ts"
   },
   "keywords": [],
   "author": "",
@@ -25,5 +26,8 @@
     "vitest": "^4.1.11"
   },
   "type": "module",
-  "private": true
+  "private": true,
+  "bin": {
+    "kalla": "./cli/index.ts"
+  }
 }

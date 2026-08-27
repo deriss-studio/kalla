@@ -85,6 +85,23 @@ const NAME_STRICT =
 /** An initial and a surname: "J Smith", "J. Smith". Only where a hint applies. */
 const NAME_WEAK = /\b[A-ZÅÄÖÉ]\.?\s+[A-ZÅÄÖÉ][a-zåäöé'\u2019-]{2,}\b/
 
+/**
+ * Column names that make an organisation the expected content.
+ *
+ * The mirror of the person hint, and needed for the same reason. A hint from a
+ * column's name is a statement about what the column holds, and it works in
+ * both directions: "Vindkraft Nordic AB" has the shape of a name, and in a
+ * column called Company it is not doubtful, it is a company. Without this, a
+ * five-thousand-row import of an ordinary lead list produces five thousand
+ * review items, which is over-flagging wearing the costume of caution.
+ *
+ * It suppresses only the doubt a bare name shape raises. An email or a profile
+ * URL identifies whatever the column is called, because those identify on
+ * their own.
+ */
+const ORGANISATION_COLUMN_HINT =
+  /\b(company|companies|organisation|organization|supplier|vendor|account|firm|employer|client|customer|counterparty|institution|entity)\b/i
+
 /** Column names that make a person the expected content of the column. */
 const PERSON_COLUMN_HINT =
   /\b(founder|ceo|cto|chair|contact|owner|manager|director|employee|candidate|person|name|email|phone|linkedin)\b/i
@@ -96,6 +113,22 @@ export function contextIsPersonal(ctx: DataContext): boolean {
     ctx.columnDataClass === 'special' ||
     ctx.rowKind === 'person'
   )
+}
+
+/**
+ * Does the surrounding structure say this is an organisation, not a person?
+ *
+ * Where there is a column, its name says what the column holds — and it says
+ * so even for a row that IS an organisation, because a Notes column about a
+ * company can still mention someone, and that doubt is worth raising.
+ *
+ * Where there is no column we are looking at a row's own label, and there the
+ * row's kind is the statement: a row declared an organisation is not a person
+ * with an unusual name.
+ */
+export function organisationHint(ctx: DataContext): boolean {
+  if (ctx.columnName) return ORGANISATION_COLUMN_HINT.test(ctx.columnName)
+  return ctx.rowKind === 'organisation'
 }
 
 /** Does the surrounding structure lower the bar for identifying someone? */
@@ -171,9 +204,13 @@ export function assess(value: string | null, ctx: DataContext = {}): Assessment 
   }
 
   // Nothing resolved. Say so out loud where there was reason to expect someone,
-  // rather than choosing a side.
+  // rather than choosing a side — but a name shape in a column of companies is
+  // not a reason to expect someone.
+  const organisation = organisationHint(ctx)
   const looksIdentifying =
-    NAME_STRICT.test(value) || value.includes('@') || PROFILE.test(value)
+    (!organisation && NAME_STRICT.test(value)) ||
+    value.includes('@') ||
+    PROFILE.test(value)
 
   let uncertainty: UncertaintyReason | null = null
   if (looksIdentifying) {
