@@ -1,6 +1,10 @@
 {
   "name": "kalla",
   "version": "0.0.1",
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10"
+  },
   "description": "A European agentic spreadsheet. Every cell knows where it came from.",
   "main": "index.js",
   "scripts": {

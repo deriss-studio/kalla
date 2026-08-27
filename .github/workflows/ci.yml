@@ -8,14 +8,31 @@ on:
 jobs:
   invariants:
     runs-on: ubuntu-latest
+
+    # Two Node versions on purpose. They ship different npm majors, and npm
+    # majors resolve the same package.json into different trees — a lockfile
+    # written by one can be one `npm ci` refuses to install under the other.
+    # That is not hypothetical: it is what broke the first run here, and it
+    # broke it in a way that reviewing the lockfile's contents could not catch.
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+
+    name: node ${{ matrix.node }}
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node }}
           cache: npm
+
+      # Installability is part of what is being tested, not a prerequisite to it.
       - run: npm ci
+
       - run: npm run typecheck
+
       # The thirteen invariants. These are the specification, not a smoke test.
       # If one fails, the change is wrong — do not weaken the test to pass.
       - run: npm test
