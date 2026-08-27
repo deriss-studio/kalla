@@ -35,6 +35,15 @@ import { createRow, writeCellValue } from '../src/lib/write.js'
 import { findTemplate, TEMPLATES } from './templates.js'
 import { amber, bold, bullet, cyan, dim, fail, green, heading, kv, ok, red, say, table, warn, when } from './out.js'
 
+/**
+ * How to tell someone to run the next command.
+ *
+ * Until this is published, it is run through an npm script, and a hint that
+ * says `kalla new ...` is a hint that does not work. Print what the reader can
+ * actually paste.
+ */
+const HOW = process.env.npm_lifecycle_event === 'kalla' ? 'npm run kalla --' : 'kalla'
+
 const ROOT = resolve(process.env.KALLA_HOME ?? '.kalla')
 const CONFIG = join(ROOT, 'config.json')
 const DATA = join(ROOT, 'data')
@@ -160,8 +169,8 @@ async function cmdInit(args: string[]): Promise<void> {
   kv('Retention default', `${retentionDays} days`)
   kv('Decisions recorded as', actor)
   say()
-  say(dim('next:  kalla new market-map --name "Nordic climate tech"'))
-  say(dim('  or:  kalla import leads.csv --sheet "..."'))
+  say(dim(`next:  ${HOW} new market-map --name "Nordic climate tech"`))
+  say(dim(`  or:  ${HOW} import leads.csv --sheet "..." --purpose "..."`))
 }
 
 async function cmdNew(args: string[]): Promise<void> {
@@ -178,7 +187,7 @@ async function cmdNew(args: string[]): Promise<void> {
       say('  ' + bold(t.key.padEnd(22)) + dim(t.summary))
     }
     say()
-    say(dim('kalla new <template> --name "..." [--purpose "..."]'))
+    say(dim(`${HOW} new <template> --name "..." [--purpose "..."]`))
     return
   }
 
@@ -276,7 +285,7 @@ async function cmdImport(args: string[]): Promise<void> {
     warn('Nothing imported yet. This is a proposal, not a decision.')
     say(`  Review ${cyan(planPath)} — correct any class it got wrong — then:`)
     say()
-    say(`  ${bold(`kalla import ${file} --sheet "${values.sheet}" --plan ${planPath}`)}`)
+    say(`  ${bold(`${HOW} import ${file} --sheet "${values.sheet}" --plan ${planPath}`)}`)
     say()
     say(dim('It guesses low on purpose. A column of cities classified personal'))
     say(dim('would manufacture a person per city, and that degrades every'))
@@ -321,7 +330,7 @@ async function cmdImport(args: string[]): Promise<void> {
 
   say()
   say(dim('Every value now carries a source, a clock and, where it names'))
-  say(dim('someone, an entity. Try: kalla subject "<a name from the file>"'))
+  say(dim(`someone, an entity. Try: ${HOW} subject "<a name from the file>"`))
 }
 
 async function cmdShow(args: string[]): Promise<void> {
@@ -628,7 +637,7 @@ async function cmdContest(args: string[]): Promise<void> {
   kv('Contest', raised.contestId)
   say(dim('  The value has not moved. The disagreement sits beside it.'))
   say()
-  say(dim(`  kalla resolve ${raised.contestId} --outcome corrected --value "..."`))
+  say(dim(`  ${HOW} resolve ${raised.contestId} --outcome corrected --value "..."`))
 }
 
 async function cmdResolve(args: string[]): Promise<void> {
@@ -701,9 +710,11 @@ async function cmdSweep(args: string[]): Promise<void> {
 const USAGE = `
 ${bold('kalla')} — make a spreadsheet you already have accountable
 
+${dim(`  run as:  ${HOW} <command>`)}
+
   ${bold('init')}      --actor <you> [--name ...] [--region ...] [--retention <days>]
   ${bold('new')}       <template> [--name ...]        ${dim('templates: ' + TEMPLATES.map((t) => t.key).join(', '))}
-  ${bold('import')}    <file.csv> --sheet <name> [--plan <plan.json>]
+  ${bold('import')}    <file.csv> --sheet <name> [--purpose ...] [--plan <plan.json>]
   ${bold('show')}      --sheet <name> [--row <label> --column <key>]
   ${bold('set')}       --sheet <name> --row <label> --column <key> --value <text>
   ${bold('subject')}   <name or email>

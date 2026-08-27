@@ -8,25 +8,20 @@ entities rather than strings, so you can answer "everything you hold about me"
 in one query and prove an erasure afterwards. No agents, no cloud, no account —
 it runs on your machine and the data never leaves it.
 
-<!--
-  RECORDING: not yet made. To record and publish it:
-      asciinema rec docs/kalla.cast --cols 100 --rows 34 -c "npm run demo -- --fast"
-      asciinema upload docs/kalla.cast
-  then replace the blockquote below with the badge the upload prints.
--->
-> **[ asciinema recording goes here ]** — the six-moment walkthrough, ~90 seconds.
-> Until then: `npm install && npm run demo`
-
 ```bash
-npx kalla init   --actor you@example.com
-npx kalla import leads.csv --sheet "Q3 leads" --purpose "Qualify inbound leads"
-npx kalla subject "someone@theircompany.com"      # everything held about them
-npx kalla erase   "someone@theircompany.com" --confirm
+git clone https://github.com/deriss/kalla && cd kalla && npm install
+
+npm run kalla -- init   --actor you@example.com
+npm run kalla -- import leads.csv --sheet "Q3 leads" --purpose "Qualify inbound leads"
+npm run kalla -- subject "someone@theircompany.com"      # everything held about them
+npm run kalla -- erase   "someone@theircompany.com" --confirm
 ```
 
 That last command writes a receipt: what it predicted would survive the
 erasure, what actually survived after scanning every text column in the
 database, and whether those two agreed.
+
+`npm run demo` walks the same ground in six moments, with pauses to talk over.
 
 ---
 
@@ -86,6 +81,11 @@ the SQL is identical.
 
 ## The CLI
 
+Until this is published to npm there is no `kalla` binary, so commands run
+through the npm script: `npm run kalla -- init --actor ...`. The CLI prints its
+own hints in whichever form you invoked it, so anything it suggests can be
+pasted as-is.
+
 ```
 kalla init      --actor <you> [--name ...] [--region ...] [--retention <days>]
 kalla new       <template> [--name ...]
@@ -143,6 +143,49 @@ receive. Every invariant here was proved by removing the predicate it depends
 on and watching it fail for the right reason — the commit messages name which
 predicate, so you can check the work rather than take it on trust.
 
+## Where the design came from
+
+The invariants were derived from enforcement actions, not from principles. That
+distinction is the reason they are shaped the way they are: a principle tells
+you what to care about, and an enforcement action tells you exactly which
+plausible-looking implementation a regulator has already rejected.
+
+**CNIL v. Kaspr** (2024, €240,000) is the closest analogue to this product that
+has been decided. The findings run to Article 6 — no lawful basis for the
+scraped contact data — and to Articles 12 and 14 on informing the people
+concerned, and Article 15 on answering them when they ask. But the one that
+shaped the schema is Article 5(1)(e): Kaspr retained contacts for five years
+*from each update*, so an automatic refresh renewed the clock and nothing was
+ever deleted. A scheduled-refresh product gets that wrong by default. It is
+invariant 2, and it is a database trigger rather than a code review comment —
+a refresh moves the value and never the clock, and when the clock runs out the
+value is deleted rather than archived.
+
+**The EDPB's guidance on web scraping** shapes the collection side. The
+expectation that a controller performs and records a legitimate interest
+assessment is why a sheet cannot exist without a declared purpose. The
+expectation that it can produce a complete list of the sources it actually used
+is why the collection log is written before a fetch rather than after. The
+expectation that it honours objections published through robots.txt and ai.txt
+is invariant 7 — including the part where a blocked domain cannot be laundered
+back in as human-pasted evidence. The expectation that special-category data is
+filtered out rather than collected and then handled is invariant 6, which
+refuses the value rather than storing it with a flag.
+
+**The AI Act** classifies by use, not by vendor, which is why the risk class
+belongs to the sheet and is derived from its declared use rather than typed
+(invariant 13). Annex III obligations were deferred to 2 December 2027 by the
+Digital Omnibus, and Article 50 transparency is live now. Classifying at
+creation means the regime is already in place when it binds, rather than
+retrofitted onto sheets that have been running for two years.
+
+**CADA's levels of sovereignty** are why the region pin is a field and not a
+marketing page. A sovereignty claim is a claim about where processing actually
+happens, so the model adapter records its processing region on every value it
+produces, and a provider that cannot report one is not eligible. The hosting
+does not yet support the strongest claim; the substrate is built so that the
+claim can be made honestly when it does, and not before.
+
 ## What this does not do yet
 
 Being specific about this, because the gaps matter more than the features.
@@ -186,6 +229,21 @@ not exist yet, and nothing here is crippled to make room for it. If that
 boundary ever starts pulling capability out of the open substrate, that is a
 bug worth opening an issue about.
 
+## Who built this, and what it needs
+
+Built at [Deriss](https://deriss.com) by one person.
+
+The runtime is the part this project does not have the hands for. It needs
+someone who has run a queue that touches the open web at volume — the fetching,
+the backoff, the crawler etiquette, the model calls, the failure modes that only
+appear at the thousandth row. The substrate is deliberately shaped to receive
+it: the collection gate, the model adapter and the cell agent contract are all
+built and tested with nothing driving them.
+
+If that sounds interesting, open an issue and say so. The same goes for anyone
+who wants to argue with the invariants — that is the most useful contribution
+this repository can receive, and it is a shorter conversation than it sounds.
+
 ## Where things live
 
 ```
@@ -212,4 +270,4 @@ background.
 
 ## Licence
 
-Apache 2.0. Vendor the full licence text before any public release.
+Apache 2.0, in full, in [LICENSE](LICENSE).
