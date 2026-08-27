@@ -287,6 +287,23 @@ database again.
   must be as easy to produce as a filled cell.
 - **Say when the invariant is in the way.** Sometimes it genuinely is. That is a
   conversation, not a thing to route around quietly.
+- **Verifying that an artifact looks correct is not verifying that it does its
+  job.** The two questions are different and the second is the one that
+  matters. A lockfile was reviewed line by line — no top-level packages
+  removed, every binary CI needs still present — pronounced benign, and
+  committed. All of that was true. It still broke CI, because nobody asked the
+  only question that counted: does `npm ci` succeed from it, under the
+  toolchain CI actually runs? Reading an artifact tells you what it contains.
+  Running it tells you whether it works, and those come apart precisely where
+  the artifact is machine-generated and its consumer is a different version of
+  the machine.
+
+  So: exercise the artifact the way its consumer will. Restore the backup,
+  apply the migration, install from the lockfile, render the export, parse the
+  file. Where that check can be made mechanical, make it — the CI matrix on two
+  Node versions is this lesson turned into a job that fails on the next push
+  rather than a habit that has to be remembered. Where it cannot, say plainly
+  in review which of the two questions you answered.
 
 ## Vocabulary
 
