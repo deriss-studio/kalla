@@ -5,11 +5,19 @@ context — it is the specification the code must satisfy.
 
 ## What this is
 
-A European agentic spreadsheet. Prompts act as columns; agents fill cells by
-researching the web; the results are structured, sourced and auditable.
+Kalla makes a spreadsheet you already have accountable. Import a CSV and every
+value carries provenance, every person becomes an entity, retention expires,
+and a subject access request and an erasure both come with proof. The interface
+is a CLI; the data never leaves the machine.
 
-The category already exists (Paradigm, Clay, Apollo). This one differs in one
-respect, and the difference is the entire company:
+That is the honest description of what exists, and it is the stronger one. The
+eventual product is an agentic spreadsheet — prompts as columns, agents filling
+cells from the web — and the category already exists (Paradigm, Clay, Apollo).
+The runtime is the next chapter, not the missing half: the accountability could
+not have been added afterwards, and it is worth having on its own.
+
+What differs, in either chapter, is one thing, and the difference is the entire
+company:
 
 > **Every value in this system knows where it came from, what it is, when it
 > expires, who put it there, and how to argue with it.**
